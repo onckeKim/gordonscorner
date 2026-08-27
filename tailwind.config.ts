@@ -20,6 +20,7 @@ const config: Config = {
       },
       fontFamily: {
         display: ['var(--font-display)', 'Georgia', 'serif'],
+        script: ['var(--font-script)', 'cursive'],
         body: ['var(--font-body)', 'system-ui', 'sans-serif'],
       },
       borderRadius: {

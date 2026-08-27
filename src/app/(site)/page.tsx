@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Logo } from '@/components/Logo';
 import { siteConfig, bookingRules } from '@/lib/config';
 
 const highlights = [
@@ -25,10 +26,10 @@ export default function HomePage() {
             <p className="mb-4 text-xs uppercase tracking-[0.2em] text-corner-accent">
               {siteConfig.address}
             </p>
-            <h1 className="font-display text-5xl font-semibold leading-tight sm:text-6xl">
-              {siteConfig.propertyName}
+            <h1>
+              <Logo size="lg" />
             </h1>
-            <p className="mt-5 max-w-md text-lg text-corner-muted">{siteConfig.description}</p>
+            <p className="mt-6 max-w-md text-lg text-corner-muted">{siteConfig.description}</p>
             <div className="mt-8 flex flex-wrap gap-4">
               <Link href="/book" className="btn-primary">
                 Check availability
