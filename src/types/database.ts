@@ -24,6 +24,8 @@ export type Booking = {
   check_out: string;
   nights: number;
   guests_count: number;
+  adults_count: number | null;
+  children_count: number | null;
   message: string | null;
   status: BookingStatus;
 
@@ -44,6 +46,7 @@ export type Booking = {
 
   hold_expires_at: string | null;
   payment_token: string | null;
+  policy_agreed_at: string | null;
 
   created_at: string;
   updated_at: string;

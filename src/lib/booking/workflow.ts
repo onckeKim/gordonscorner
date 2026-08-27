@@ -1,6 +1,6 @@
 import 'server-only';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
-import { bookingRules, calculateStayTotal } from '@/lib/config';
+import { bookingRules, calculateStayTotal, propertyDetails } from '@/lib/config';
 import { checkAvailability } from '@/lib/booking/availability';
 import { generateBookingReference, generatePaymentToken } from '@/lib/booking/reference';
 import { createPaymentLink } from '@/lib/payments';
@@ -64,9 +64,23 @@ export async function createBookingRequest(input: {
   guestPhone?: string;
   checkIn: string;
   checkOut: string;
-  guestsCount: number;
+  adultsCount: number;
+  childrenCount: number;
   message?: string;
+  policyAgreed: boolean;
 }): Promise<Booking> {
+  if (!input.policyAgreed) {
+    throw new WorkflowError('Please confirm you agree to the house rules and cancellation policy.');
+  }
+
+  const guestsCount = input.adultsCount + input.childrenCount;
+  if (guestsCount < 1) {
+    throw new WorkflowError('Please add at least one guest.');
+  }
+  if (guestsCount > propertyDetails.maxGuests) {
+    throw new WorkflowError(`This property sleeps a maximum of ${propertyDetails.maxGuests} guests.`);
+  }
+
   const availability = await checkAvailability({
     checkIn: input.checkIn,
     checkOut: input.checkOut,
@@ -91,13 +105,16 @@ export async function createBookingRequest(input: {
       guest_phone: input.guestPhone ?? null,
       check_in: input.checkIn,
       check_out: input.checkOut,
-      guests_count: input.guestsCount,
+      guests_count: guestsCount,
+      adults_count: input.adultsCount,
+      children_count: input.childrenCount,
       message: input.message ?? null,
       status: 'pending_review',
       total_amount: totalAmount,
       deposit_amount: depositAmount,
       balance_amount: balanceAmount,
       currency: bookingRules.currency,
+      policy_agreed_at: new Date().toISOString(),
     })
     .select('*')
     .single();

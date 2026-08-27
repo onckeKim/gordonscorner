@@ -3,15 +3,16 @@ import { siteConfig } from '@/lib/config';
 import { Logo } from './Logo';
 
 const EXPLORE_LINKS = [
-  { href: '/#stay', label: 'The Stay' },
-  { href: '/#gallery', label: 'Gallery' },
-  { href: '/#faq', label: 'FAQ' },
+  { href: '/accommodation', label: 'Accommodation' },
+  { href: '/gallery', label: 'Gallery' },
+  { href: '/about', label: 'About' },
   { href: '/book', label: 'Check availability' },
 ];
 
 const POLICY_LINKS = [
-  { href: '/#policies', label: 'Cancellation policy' },
-  { href: '/#policies', label: 'House rules' },
+  { href: '/faq#policies', label: 'Cancellation policy' },
+  { href: '/faq#policies', label: 'House rules' },
+  { href: '/contact', label: 'Contact us' },
   { href: '/booking/lookup', label: 'Find my booking' },
 ];
 

@@ -1,5 +1,7 @@
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, PhoneCall } from 'lucide-react';
 import { PriceBreakdown } from '@/components/PriceBreakdown';
+import { siteConfig, propertyDetails } from '@/lib/config';
+import { checkInSupportInfo } from '@/lib/content/contact';
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-ZA', {
@@ -76,6 +78,29 @@ export function ConfirmationScreen({
           depositPaid
           balancePaid={balancePaid}
         />
+      </div>
+
+      <div className="card mt-6 text-left">
+        <p className="label mb-0">Check-in support</p>
+        <p className="mt-2 text-sm text-corner-muted">{checkInSupportInfo}</p>
+        <p className="mt-2 text-sm text-corner-muted">
+          Check-in from {propertyDetails.checkInTime}, check-out by {propertyDetails.checkOutTime}.
+        </p>
+
+        <div className="mt-4 flex items-start gap-2 rounded-lg bg-corner-forest/5 p-3">
+          <PhoneCall aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-corner-forest" />
+          <div>
+            <p className="text-sm font-medium text-corner-charcoal">
+              Emergency contact — {siteConfig.emergencyContactName}
+            </p>
+            <a href={`tel:${siteConfig.emergencyContactPhone}`} className="text-sm text-corner-forest underline hover:no-underline">
+              {siteConfig.emergencyContactPhone}
+            </a>
+            <p className="mt-1 text-xs text-corner-muted">
+              For use during your stay only — shown here because your booking is confirmed.
+            </p>
+          </div>
+        </div>
       </div>
 
       <p className="mt-6 text-sm text-corner-muted">

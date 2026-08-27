@@ -9,8 +9,12 @@ const bookingRequestSchema = z.object({
   guestPhone: z.string().trim().max(40).optional(),
   checkIn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   checkOut: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  guestsCount: z.number().int().min(1).max(20),
+  adultsCount: z.number().int().min(1).max(20),
+  childrenCount: z.number().int().min(0).max(20),
   message: z.string().trim().max(2000).optional(),
+  policyAgreed: z.literal(true, {
+    errorMap: () => ({ message: 'Please confirm you agree to the house rules and cancellation policy.' }),
+  }),
 });
 
 /** Public endpoint: guest submits a new booking request. */

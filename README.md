@@ -17,7 +17,8 @@ cp .env.example .env.local
 ```
 
 1. Create a [Supabase](https://supabase.com) project.
-2. In the SQL editor, run `supabase/migrations/0001_init.sql`.
+2. In the SQL editor, run every file in `supabase/migrations/` in order
+   (`0001_init.sql`, then `0002_booking_details.sql`).
 3. Copy your project URL + anon key + service role key into `.env.local`
    (Settings → API).
 4. Create your first admin user: Authentication → Users → Add user (email +
@@ -109,7 +110,7 @@ Accessibility built into the tokens/primitives rather than bolted on per page:
 ```
 src/
   app/
-    (site)/            Public pages: landing, /book, /booking/[id], /pay/[token]
+    (site)/            Public pages — see the table below
     admin/              Admin login + protected dashboard/calendar/booking detail
     api/                Route handlers (see below)
   components/           Site UI (MainNav, Hero, Gallery, Calendar, BookingForm, ...)
@@ -121,10 +122,37 @@ src/
     payments/            Provider interface + PayFast/dev adapters
     supabase/             Browser / server / service-role clients
     auth/                 requireAdmin() guard for API routes
-    config.ts             ⭐ central business configuration
+    config.ts             ⭐ central business configuration (pricing, rules, contact)
+    content/               ⭐ central editable marketing copy (see below)
   types/database.ts      Hand-written types matching the Supabase schema
-supabase/migrations/     SQL schema + RLS policies
+supabase/migrations/     SQL schema + RLS policies, in order (0001, 0002, ...)
 ```
+
+### Public pages
+
+| Route | Purpose |
+|---|---|
+| `/` | Home — hero, overview, pricing, amenities, gallery preview, reviews, FAQ preview |
+| `/accommodation` | Full property detail: capacity, amenities, gallery, accessibility/parking/safety, availability |
+| `/gallery` | Full gallery with category filters (Bedroom/Living Area/Kitchen/Bathroom/Exterior/Amenities) and a keyboard-navigable lightbox |
+| `/book` | Availability + booking request form |
+| `/booking/[id]` | Guest booking status page (by id or reference) |
+| `/booking/lookup` | Find a booking by reference |
+| `/about` | Story, philosophy, host intro, local area |
+| `/contact` | Contact form + phone/email/WhatsApp/address/map |
+| `/faq` | Full FAQ (grouped) + policies |
+| `/pay/[token]` | Deposit/balance payment |
+
+### Content model
+
+Every piece of editable marketing copy — property description, amenities,
+gallery captions, FAQ answers, policies, testimonials, about-page story,
+contact copy — lives in `src/lib/content/` as typed, named exports (not
+scattered through page JSX). This is deliberate: a future "edit site
+content" admin screen can be built as a thin layer that reads/writes a
+Supabase table shaped like these same exports (e.g. `site_content` keyed by
+field name) without any page component needing to change. That admin screen
+itself isn't built yet — see "Assumptions & placeholders" below.
 
 ### API routes
 
@@ -144,7 +172,7 @@ supabase/migrations/     SQL schema + RLS policies
 | `/api/payments/webhook` | POST | Provider → us: payment notification (ITN) |
 | `/api/cron/expire-holds` | GET | Scheduled: release lapsed holds (see `vercel.json`) |
 | `/api/admin/blocked-dates` | POST | Admin: manually block a date range |
-| `/api/enquiries` | POST | Public: general enquiry form (`Newsletter` component) → emails admin |
+| `/api/enquiries` | POST | Public: contact/enquiry form (`EnquiryForm`, used on home + `/contact`) → emails admin |
 
 ## Environment variables
 
@@ -205,6 +233,29 @@ simulated payments). To go live:
   to skip a loading state, or (the client-side `Calendar` availability fetch)
   has its own inline loading text. Reach for these primitives first the next
   time a page needs one, rather than hand-rolling another loading state.
-- Testimonials on the homepage are clearly placeholder copy (city-only
-  attribution, no fabricated full names) — swap `TESTIMONIALS` in
-  `src/app/(site)/page.tsx` for real guest quotes before launch.
+- Testimonials are clearly placeholder copy (city-only attribution, no
+  fabricated full names) — edit `src/lib/content/testimonials.ts` for real
+  guest quotes before launch.
+- All gallery photos (`src/lib/content/gallery.ts`), the property/about/host
+  copy, and every FAQ answer are realistic placeholder content — each field
+  is named for exactly what it holds, so replacing it is a find-and-edit in
+  `src/lib/content/`, not a redesign.
+- "Additional fees" and "Discount" are real, structural line items in
+  pricing (`bookingRules.additionalFeeZar` / `discountZar` in
+  `src/lib/config.ts`) — both default to 0 (hidden from the price breakdown
+  when zero) until a cleaning fee or promo is actually configured.
+- The booking form captures adults/children counts and a required
+  policy-agreement checkbox, persisted on the booking
+  (`adults_count`/`children_count`/`policy_agreed_at` — see
+  `supabase/migrations/0002_booking_details.sql`); the property's max-guest
+  capacity (`propertyDetails.maxGuests`) is enforced server-side.
+- The emergency contact number is only ever rendered on the guest's own
+  confirmed booking status page (`ConfirmationScreen`), not on the public
+  `/contact` page — matching "visible only to confirmed guests" without
+  faking an authentication gate that doesn't otherwise exist on that page.
+- WhatsApp uses a real `wa.me/<number>` deep link (no API key needed) —
+  update `siteConfig.whatsappNumber` in `src/lib/config.ts`.
+- The map on `/accommodation` and `/contact` is a labelled placeholder
+  (`role="img" aria-label="Map placeholder..."`) until a real address is
+  confirmed — set `siteConfig.mapEmbedUrl` (Google Maps → Share → Embed)
+  and swap the placeholder `<div>` for an `<iframe>` once ready.

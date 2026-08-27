@@ -6,6 +6,10 @@ function formatZar(amount: number): string {
 
 interface PriceBreakdownProps {
   nights: number;
+  /** Nightly-rate subtotal, before fees/discount. Defaults to nights × nightly rate if omitted. */
+  subtotalAmount?: number;
+  additionalFeeAmount?: number;
+  discountAmount?: number;
   totalAmount: number;
   depositAmount: number;
   balanceAmount: number;
@@ -17,6 +21,9 @@ interface PriceBreakdownProps {
 /** Reused on the booking form (estimate) and booking status pages (actuals). */
 export function PriceBreakdown({
   nights,
+  subtotalAmount,
+  additionalFeeAmount = 0,
+  discountAmount = 0,
   totalAmount,
   depositAmount,
   balanceAmount,
@@ -30,6 +37,22 @@ export function PriceBreakdown({
         <dt className="text-corner-muted">
           {nights} night{nights === 1 ? '' : 's'}
         </dt>
+        <dd>{formatZar(subtotalAmount ?? totalAmount - additionalFeeAmount + discountAmount)}</dd>
+      </div>
+      {additionalFeeAmount > 0 && (
+        <div className="flex justify-between py-1 text-corner-muted">
+          <dt>{bookingRules.additionalFeeLabel}</dt>
+          <dd>{formatZar(additionalFeeAmount)}</dd>
+        </div>
+      )}
+      {discountAmount > 0 && (
+        <div className="flex justify-between py-1 text-corner-success">
+          <dt>{bookingRules.discountLabel}</dt>
+          <dd>&minus;{formatZar(discountAmount)}</dd>
+        </div>
+      )}
+      <div className="flex justify-between border-t border-corner-stone py-1.5 mt-1 font-medium text-corner-charcoal">
+        <dt>Total</dt>
         <dd>{formatZar(totalAmount)}</dd>
       </div>
       <div className="flex justify-between py-1 font-medium text-corner-charcoal">
