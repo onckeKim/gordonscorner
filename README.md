@@ -59,6 +59,51 @@ pending_review ──▶ info_requested ──▶ pending_review
 
 Cancellation is available from `accepted` or `confirmed` at any time.
 
+## Design system
+
+Colors, spacing and type live as tokens, not one-off values:
+
+- **Colors** — CSS custom properties in `src/app/globals.css` (`:root`), consumed
+  through Tailwind in `tailwind.config.ts` via `rgb(var(--color-x) / <alpha-value>)`
+  so opacity modifiers (`bg-corner-forest/10`) keep working. Semantic names —
+  `corner-ivory`, `corner-white`, `corner-forest`, `corner-charcoal`, `corner-gold`,
+  `corner-stone`, `corner-muted`, `corner-success`, `corner-warning`, `corner-error`
+  — are the ones to reach for in new components. A parallel set of legacy aliases
+  (`corner-bg`, `corner-ink`, `corner-accent`, `corner-border`, ...) points at the
+  same tokens so every component built before this palette lands still renders
+  correctly with zero changes.
+- **Type** — `Fraunces` (editorial serif, headings only — `font-display`),
+  `Inter` (body/forms — `font-body`), `Alex Brush` (script — reserved for the
+  Gordon's Corner wordmark in `components/Logo.tsx`, never used elsewhere).
+- **Components** — `src/components/ui/` holds framework-agnostic primitives
+  (`Button`, `Accordion`, `Skeleton`/`SkeletonCard`/`LoadingRegion`, `EmptyState`,
+  `Alert`); `src/components/` holds the site's building blocks (`TopBar`,
+  `MainNav`, `MobileNav`, `Hero`, `PropertySummaryCard`, `AmenityCard`,
+  `Gallery`, `Testimonials`, `FAQ`, `PolicyAccordion`, `PriceBreakdown`,
+  `ConfirmationScreen`, `Newsletter`, `Footer`, `Calendar`).
+
+Accessibility built into the tokens/primitives rather than bolted on per page:
+
+- Global `:focus-visible` ring (`globals.css`) — every interactive element gets
+  a visible keyboard focus state for free.
+- `@media (prefers-reduced-motion: reduce)` collapses all animation/transition
+  durations site-wide; `Skeleton` and `Gallery` hover/shimmer effects respect it
+  via `motion-reduce:` variants too.
+- `Calendar` is a full keyboard date grid: roving tabindex, arrow keys move by
+  day, Up/Down by week, Home/End to the start/end of the week, Page Up/Down
+  by month, Enter/Space to select — unavailable days stay perceivable
+  (`aria-disabled`) rather than vanishing from the tab order entirely.
+- `Alert` picks `role="alert"` (errors/warnings) vs `role="status"` (info/success)
+  so screen readers interrupt only when something needs attention, and every
+  error usage pairs a `title` with a `description` that says what to do next
+  (e.g. "choose a later check-out date"), not just that something failed.
+- Every image-bearing component (`Hero`, `Gallery`, `PropertySummaryCard`)
+  requires an `alt`/`imageAlt` prop even before a real photo exists — the
+  placeholder gradient renders with `role="img" aria-label={alt}` so alt text
+  is never an afterthought once real photography is dropped in.
+- Skip-to-content link at the top of `(site)/layout.tsx`; all form fields use
+  real `<label htmlFor>` elements, never placeholder-as-label.
+
 ## Folder structure
 
 ```
@@ -67,7 +112,8 @@ src/
     (site)/            Public pages: landing, /book, /booking/[id], /pay/[token]
     admin/              Admin login + protected dashboard/calendar/booking detail
     api/                Route handlers (see below)
-  components/           Shared UI (Calendar, BookingForm, StatusBadge, ...)
+  components/           Site UI (MainNav, Hero, Gallery, Calendar, BookingForm, ...)
+  components/ui/        Framework-agnostic primitives (Button, Accordion, Alert, ...)
   components/admin/     Admin-only UI (BookingActions, BlockDatesForm, ...)
   lib/
     booking/            Workflow state machine, availability checks, reference gen
@@ -98,6 +144,7 @@ supabase/migrations/     SQL schema + RLS policies
 | `/api/payments/webhook` | POST | Provider → us: payment notification (ITN) |
 | `/api/cron/expire-holds` | GET | Scheduled: release lapsed holds (see `vercel.json`) |
 | `/api/admin/blocked-dates` | POST | Admin: manually block a date range |
+| `/api/enquiries` | POST | Public: general enquiry form (`Newsletter` component) → emails admin |
 
 ## Environment variables
 
@@ -152,3 +199,12 @@ simulated payments). To go live:
   there's no separate guest login.
 - Currency is fixed to ZAR and pricing is a flat nightly rate; seasonal/dynamic
   pricing would extend `calculateStayTotal` in `src/lib/config.ts`.
+- `Skeleton`/`SkeletonCard`/`LoadingRegion` and `EmptyState` (`components/ui/`)
+  are built and ready but not yet wired into a specific loading/empty state on
+  any page — every current data fetch either resolves fast enough server-side
+  to skip a loading state, or (the client-side `Calendar` availability fetch)
+  has its own inline loading text. Reach for these primitives first the next
+  time a page needs one, rather than hand-rolling another loading state.
+- Testimonials on the homepage are clearly placeholder copy (city-only
+  attribution, no fabricated full names) — swap `TESTIMONIALS` in
+  `src/app/(site)/page.tsx` for real guest quotes before launch.

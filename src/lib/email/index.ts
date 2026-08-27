@@ -61,3 +61,7 @@ export async function sendAdminConfirmedEmail(booking: Booking) {
 export async function sendBalancePaymentLinkEmail(booking: Booking, paymentUrl: string) {
   await send(booking.guest_email, templates.balancePaymentLinkEmail(booking, paymentUrl));
 }
+
+export async function sendEnquiryEmail(enquiry: { name: string; email: string; message: string }) {
+  await send(adminNotificationEmail(), templates.enquiryEmail(enquiry));
+}

@@ -2,29 +2,85 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* Gordon's Corner palette — RGB triplets so Tailwind's /opacity
+     modifiers work (see tailwind.config.ts). Source hex values:
+     ivory #F5F2ED · white #FCFBF8 · forest #2F4641 · charcoal #252525 ·
+     gold #B4852D · stone #DED8CE · muted text #6F6A63 */
+  --color-ivory: 245 242 237;
+  --color-white: 252 251 248;
+  --color-forest: 47 70 65;
+  --color-forest-dark: 30 46 42;
+  --color-charcoal: 37 37 37;
+  --color-gold: 180 133 45;
+  --color-gold-dark: 143 104 32;
+  --color-stone: 222 216 206;
+  --color-muted-text: 111 106 99;
+  --color-success: 63 109 78;
+  --color-warning: 154 93 20;
+  --color-error: 158 44 38;
+}
+
 html {
   scroll-behavior: smooth;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 body {
-  background-color: theme('colors.corner.bg');
-  color: theme('colors.corner.ink');
+  background-color: theme('colors.corner.ivory');
+  color: theme('colors.corner.charcoal');
+}
+
+/* Visible keyboard focus everywhere, independent of mouse-focus styling. */
+:focus-visible {
+  outline: 2px solid theme('colors.corner.gold');
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 @layer components {
+  /* --- Buttons ------------------------------------------------------- */
   .btn-primary {
-    @apply inline-flex items-center justify-center rounded-full bg-corner-accent px-7 py-3 text-sm font-medium text-white transition-colors hover:bg-corner-accent-dark disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-corner-gold px-7 py-3 text-sm font-medium text-white transition-colors hover:bg-corner-gold-dark disabled:cursor-not-allowed disabled:opacity-50;
   }
   .btn-secondary {
-    @apply inline-flex items-center justify-center rounded-full border border-corner-border bg-white px-7 py-3 text-sm font-medium text-corner-ink transition-colors hover:bg-corner-bg disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-corner-stone bg-corner-white px-7 py-3 text-sm font-medium text-corner-charcoal transition-colors hover:bg-corner-ivory disabled:cursor-not-allowed disabled:opacity-50;
   }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium text-corner-ivory/90 transition-colors hover:text-corner-gold disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  /* --- Surfaces -------------------------------------------------------- */
   .card {
-    @apply rounded-xl2 border border-corner-border bg-corner-card p-6 shadow-soft;
+    @apply rounded-xl2 border border-corner-stone bg-corner-white p-6 shadow-soft;
   }
+
+  /* --- Forms ------------------------------------------------------------ */
   .input {
-    @apply w-full rounded-lg border border-corner-border bg-white px-4 py-2.5 text-sm text-corner-ink placeholder:text-corner-muted focus:border-corner-accent focus:outline-none focus:ring-1 focus:ring-corner-accent;
+    @apply w-full rounded-lg border border-corner-stone bg-corner-white px-4 py-2.5 text-sm text-corner-charcoal placeholder:text-corner-muted/70 focus:border-corner-gold focus:outline-none focus:ring-1 focus:ring-corner-gold;
   }
   .label {
     @apply mb-1.5 block text-xs font-medium uppercase tracking-wide text-corner-muted;
+  }
+
+  /* --- Editorial typography helpers -------------------------------------- */
+  .eyebrow {
+    @apply text-xs font-semibold uppercase tracking-[0.25em] text-corner-gold;
+  }
+  .section-heading {
+    @apply font-display text-3xl font-semibold text-corner-charcoal sm:text-4xl;
   }
 }

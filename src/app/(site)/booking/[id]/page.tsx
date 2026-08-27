@@ -2,11 +2,9 @@ import { notFound } from 'next/navigation';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ProposalResponse } from '@/components/ProposalResponse';
-import { bookingRules } from '@/lib/config';
-
-function formatZar(amount: number): string {
-  return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount);
-}
+import { ConfirmationScreen } from '@/components/ConfirmationScreen';
+import { PriceBreakdown } from '@/components/PriceBreakdown';
+import { Alert } from '@/components/ui/Alert';
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -35,6 +33,25 @@ export default async function BookingStatusPage({
     notFound();
   }
 
+  if (booking.status === 'confirmed' || booking.status === 'balance_paid') {
+    return (
+      <div className="mx-auto max-w-2xl px-6 py-16">
+        <ConfirmationScreen
+          guestName={booking.guest_name}
+          reference={booking.reference ?? '—'}
+          checkIn={booking.check_in}
+          checkOut={booking.check_out}
+          nights={booking.nights}
+          guestsCount={booking.guests_count}
+          totalAmount={booking.total_amount}
+          depositAmount={booking.deposit_amount}
+          balanceAmount={booking.balance_amount}
+          balancePaid={booking.status === 'balance_paid'}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-2xl px-6 py-16">
       <div className="mb-6 flex items-center justify-between">
@@ -42,7 +59,7 @@ export default async function BookingStatusPage({
         <StatusBadge status={booking.status} />
       </div>
 
-      <div className="card space-y-4">
+      <div className="card space-y-5">
         {booking.reference && (
           <div>
             <p className="label">Booking reference</p>
@@ -69,34 +86,21 @@ export default async function BookingStatusPage({
           </div>
         </div>
 
-        <div className="border-t border-corner-border pt-4 text-sm">
-          <div className="flex justify-between">
-            <span className="text-corner-muted">Total</span>
-            <span>{formatZar(booking.total_amount)}</span>
-          </div>
-          <div className="mt-1 flex justify-between">
-            <span className="text-corner-muted">
-              Deposit ({Math.round(bookingRules.depositRate * 100)}%)
-              {booking.deposit_paid_at ? ' — paid' : ''}
-            </span>
-            <span>{formatZar(booking.deposit_amount)}</span>
-          </div>
-          <div className="mt-1 flex justify-between">
-            <span className="text-corner-muted">
-              Balance{booking.balance_paid_at ? ' — paid' : ''}
-            </span>
-            <span>{formatZar(booking.balance_amount)}</span>
-          </div>
-        </div>
+        <PriceBreakdown
+          nights={booking.nights}
+          totalAmount={booking.total_amount}
+          depositAmount={booking.deposit_amount}
+          balanceAmount={booking.balance_amount}
+          depositPaid={Boolean(booking.deposit_paid_at)}
+          balancePaid={Boolean(booking.balance_paid_at)}
+        />
 
         {booking.status === 'info_requested' && booking.info_request_message && (
-          <div className="rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
-            <p className="font-medium">We need a little more information:</p>
-            <p className="mt-1">{booking.info_request_message}</p>
-            <p className="mt-2 text-xs">
-              Please reply to your confirmation email or contact us directly.
-            </p>
-          </div>
+          <Alert
+            variant="warning"
+            title="We need a little more information"
+            description={`${booking.info_request_message} — please reply to your confirmation email or contact us directly.`}
+          />
         )}
 
         {booking.status === 'dates_proposed' &&
@@ -110,21 +114,31 @@ export default async function BookingStatusPage({
           )}
 
         {booking.status === 'accepted' && (
-          <div className="rounded-lg bg-blue-50 p-4 text-sm text-blue-900">
-            Check your inbox for a secure link to pay your deposit and confirm this booking.
-          </div>
-        )}
-
-        {(booking.status === 'confirmed' || booking.status === 'balance_paid') && (
-          <div className="rounded-lg bg-emerald-50 p-4 text-sm text-emerald-900">
-            You&rsquo;re all set — we look forward to hosting you.
-          </div>
+          <Alert
+            variant="info"
+            title="Almost there"
+            description="Check your inbox for a secure link to pay your deposit and confirm this booking."
+          />
         )}
 
         {booking.status === 'declined' && (
-          <div className="rounded-lg bg-red-50 p-4 text-sm text-red-900">
-            {booking.decline_reason || 'This request could not be accommodated.'}
-          </div>
+          <Alert
+            variant="error"
+            title="This request could not be accommodated"
+            description={booking.decline_reason ?? undefined}
+          />
+        )}
+
+        {booking.status === 'expired' && (
+          <Alert
+            variant="error"
+            title="This request has expired"
+            description="The deposit wasn't received within the hold window, so these dates were released. Feel free to submit a new request."
+          />
+        )}
+
+        {booking.status === 'cancelled' && (
+          <Alert variant="error" title="This booking was cancelled" />
         )}
       </div>
     </div>

@@ -21,16 +21,16 @@ function formatZar(amount: number): string {
 
 function shell(title: string, bodyHtml: string): string {
   return `
-  <div style="font-family: Georgia, 'Times New Roman', serif; background:#faf6f0; padding:32px;">
-    <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e7ded1;">
-      <div style="background:#2a241d;padding:28px 32px;">
-        <h1 style="color:#faf6f0;font-size:22px;margin:0;letter-spacing:0.04em;">${siteConfig.propertyName}</h1>
+  <div style="font-family: Georgia, 'Times New Roman', serif; background:#F5F2ED; padding:32px;">
+    <div style="max-width:560px;margin:0 auto;background:#FCFBF8;border-radius:16px;overflow:hidden;border:1px solid #DED8CE;">
+      <div style="background:#2F4641;padding:28px 32px;">
+        <h1 style="color:#FCFBF8;font-size:22px;margin:0;letter-spacing:0.04em;">${siteConfig.propertyName}</h1>
       </div>
-      <div style="padding:32px;color:#2a241d;font-size:15px;line-height:1.6;">
-        <h2 style="font-size:19px;margin-top:0;">${title}</h2>
+      <div style="padding:32px;color:#252525;font-size:15px;line-height:1.6;">
+        <h2 style="font-size:19px;margin-top:0;color:#B4852D;">${title}</h2>
         ${bodyHtml}
       </div>
-      <div style="padding:20px 32px;background:#faf6f0;color:#847a6d;font-size:12px;">
+      <div style="padding:20px 32px;background:#F5F2ED;color:#6F6A63;font-size:12px;">
         ${siteConfig.propertyName} · ${siteConfig.address} · ${siteConfig.contactEmail}
       </div>
     </div>
@@ -40,11 +40,11 @@ function shell(title: string, bodyHtml: string): string {
 function bookingSummary(booking: Booking): string {
   return `
     <table style="width:100%;border-collapse:collapse;margin:16px 0;">
-      <tr><td style="padding:4px 0;color:#847a6d;">Check-in</td><td style="padding:4px 0;text-align:right;">${formatDate(booking.check_in)}</td></tr>
-      <tr><td style="padding:4px 0;color:#847a6d;">Check-out</td><td style="padding:4px 0;text-align:right;">${formatDate(booking.check_out)}</td></tr>
-      <tr><td style="padding:4px 0;color:#847a6d;">Nights</td><td style="padding:4px 0;text-align:right;">${booking.nights}</td></tr>
-      <tr><td style="padding:4px 0;color:#847a6d;">Guests</td><td style="padding:4px 0;text-align:right;">${booking.guests_count}</td></tr>
-      <tr><td style="padding:4px 0;color:#847a6d;">Total</td><td style="padding:4px 0;text-align:right;">${formatZar(booking.total_amount)}</td></tr>
+      <tr><td style="padding:4px 0;color:#6F6A63;">Check-in</td><td style="padding:4px 0;text-align:right;">${formatDate(booking.check_in)}</td></tr>
+      <tr><td style="padding:4px 0;color:#6F6A63;">Check-out</td><td style="padding:4px 0;text-align:right;">${formatDate(booking.check_out)}</td></tr>
+      <tr><td style="padding:4px 0;color:#6F6A63;">Nights</td><td style="padding:4px 0;text-align:right;">${booking.nights}</td></tr>
+      <tr><td style="padding:4px 0;color:#6F6A63;">Guests</td><td style="padding:4px 0;text-align:right;">${booking.guests_count}</td></tr>
+      <tr><td style="padding:4px 0;color:#6F6A63;">Total</td><td style="padding:4px 0;text-align:right;">${formatZar(booking.total_amount)}</td></tr>
     </table>`;
 }
 
@@ -76,7 +76,7 @@ export function depositLinkEmail(booking: Booking, paymentUrl: string): EmailCon
       `<p>Please secure your booking with a ${Math.round(bookingRules.depositRate * 100)}% deposit of <strong>${formatZar(booking.deposit_amount)}</strong>. Your dates are held for ${bookingRules.holdExpiryHours} hours.</p>
        ${bookingSummary(booking)}
        <p style="text-align:center;margin:28px 0;">
-         <a href="${paymentUrl}" style="background:#8a6b45;color:#fff;padding:12px 28px;border-radius:999px;text-decoration:none;font-size:15px;">Pay deposit securely</a>
+         <a href="${paymentUrl}" style="background:#B4852D;color:#fff;padding:12px 28px;border-radius:999px;text-decoration:none;font-size:15px;">Pay deposit securely</a>
        </p>`,
     ),
   };
@@ -106,8 +106,8 @@ export function datesProposedEmail(booking: Booking): EmailContent {
       'We have an alternative for you',
       `<p>Your original dates aren't available, but we can offer:</p>
        <table style="width:100%;border-collapse:collapse;margin:16px 0;">
-         <tr><td style="padding:4px 0;color:#847a6d;">Proposed check-in</td><td style="padding:4px 0;text-align:right;">${booking.proposed_check_in ? formatDate(booking.proposed_check_in) : ''}</td></tr>
-         <tr><td style="padding:4px 0;color:#847a6d;">Proposed check-out</td><td style="padding:4px 0;text-align:right;">${booking.proposed_check_out ? formatDate(booking.proposed_check_out) : ''}</td></tr>
+         <tr><td style="padding:4px 0;color:#6F6A63;">Proposed check-in</td><td style="padding:4px 0;text-align:right;">${booking.proposed_check_in ? formatDate(booking.proposed_check_in) : ''}</td></tr>
+         <tr><td style="padding:4px 0;color:#6F6A63;">Proposed check-out</td><td style="padding:4px 0;text-align:right;">${booking.proposed_check_out ? formatDate(booking.proposed_check_out) : ''}</td></tr>
        </table>
        <p>Visit your <a href="${siteConfig.siteUrl}/booking/${booking.id}">booking status page</a> to accept or decline.</p>`,
     ),
@@ -145,8 +145,20 @@ export function balancePaymentLinkEmail(booking: Booking, paymentUrl: string): E
       'Remaining balance',
       `<p>Your remaining balance of <strong>${formatZar(booking.balance_amount)}</strong> is due.</p>
        <p style="text-align:center;margin:28px 0;">
-         <a href="${paymentUrl}" style="background:#8a6b45;color:#fff;padding:12px 28px;border-radius:999px;text-decoration:none;font-size:15px;">Pay balance securely</a>
+         <a href="${paymentUrl}" style="background:#B4852D;color:#fff;padding:12px 28px;border-radius:999px;text-decoration:none;font-size:15px;">Pay balance securely</a>
        </p>`,
+    ),
+  };
+}
+
+export function enquiryEmail(enquiry: { name: string; email: string; message: string }): EmailContent {
+  return {
+    subject: `New enquiry from ${enquiry.name}`,
+    html: shell(
+      'New enquiry',
+      `<p><strong>${enquiry.name}</strong> (${enquiry.email}) sent a message via the website:</p>
+       <p style="white-space:pre-wrap;background:#F5F2ED;border-radius:8px;padding:14px 16px;">${enquiry.message}</p>
+       <p><a href="mailto:${enquiry.email}">Reply to ${enquiry.name}</a></p>`,
     ),
   };
 }

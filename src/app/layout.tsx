@@ -1,11 +1,13 @@
 import type { Metadata } from 'next';
-import { Cormorant_Garamond, Alex_Brush, Inter } from 'next/font/google';
+import { Fraunces, Alex_Brush, Inter } from 'next/font/google';
 import { siteConfig } from '@/lib/config';
 import './globals.css';
 
-const display = Cormorant_Garamond({
+// Elegant editorial serif for headings — used site-wide, never for body copy.
+const display = Fraunces({
   subsets: ['latin'],
-  weight: ['500', '600', '700'],
+  weight: ['400', '500', '600', '700'],
+  style: ['normal', 'italic'],
   variable: '--font-display',
   display: 'swap',
 });

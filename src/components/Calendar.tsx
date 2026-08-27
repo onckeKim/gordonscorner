@@ -1,18 +1,23 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  addDays,
   addMonths,
   eachDayOfInterval,
   endOfMonth,
+  endOfWeek,
   format,
   isBefore,
   isSameDay,
+  isSameMonth,
+  isToday,
   startOfDay,
   startOfMonth,
   startOfWeek,
-  endOfWeek,
+  subMonths,
 } from 'date-fns';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { bookingRules } from '@/lib/config';
 
 export interface DateRange {
@@ -34,6 +39,10 @@ function toIso(date: Date): string {
   return format(date, 'yyyy-MM-dd');
 }
 
+function dayKey(date: Date): string {
+  return toIso(date);
+}
+
 function isWithinAnyRange(date: Date, ranges: UnavailableRange[]): boolean {
   const iso = toIso(date);
   return ranges.some((r) => iso >= r.start_date && iso < r.end_date);
@@ -51,6 +60,9 @@ export function Calendar({ value, onChange }: CalendarProps) {
   const [error, setError] = useState<string | null>(null);
   const [visibleMonth, setVisibleMonth] = useState(startOfMonth(new Date()));
   const [hint, setHint] = useState<string | null>(null);
+  const [activeDate, setActiveDateState] = useState(() => value.checkIn ?? new Date());
+  const dayRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const pendingFocusKey = useRef<string | null>(null);
 
   useEffect(() => {
     fetch('/api/availability')
@@ -60,14 +72,35 @@ export function Calendar({ value, onChange }: CalendarProps) {
       .finally(() => setLoading(false));
   }, []);
 
-  const today = startOfDay(new Date());
+  useEffect(() => {
+    if (pendingFocusKey.current) {
+      dayRefs.current.get(pendingFocusKey.current)?.focus();
+      pendingFocusKey.current = null;
+    }
+  }, [activeDate, visibleMonth]);
 
-  function isDisabled(date: Date): boolean {
+  const today = startOfDay(new Date());
+  const secondMonth = useMemo(() => addMonths(visibleMonth, 1), [visibleMonth]);
+
+  function isUnavailable(date: Date): boolean {
     return isBefore(date, today) || isWithinAnyRange(date, unavailable);
   }
 
-  function handleDayClick(date: Date) {
-    if (isDisabled(date)) return;
+  /** Moves the roving-tabindex focus to `date`, shifting the visible months if needed. */
+  function setActiveDate(date: Date, focus = true) {
+    setActiveDateState(date);
+    if (isBefore(date, visibleMonth)) {
+      setVisibleMonth(startOfMonth(date));
+    } else if (!isSameMonth(date, visibleMonth) && !isSameMonth(date, secondMonth)) {
+      setVisibleMonth(startOfMonth(subMonths(date, 1)));
+    }
+    if (focus) {
+      pendingFocusKey.current = dayKey(date);
+    }
+  }
+
+  function selectDate(date: Date) {
+    if (isUnavailable(date)) return;
     setHint(null);
 
     const { checkIn, checkOut } = value;
@@ -96,6 +129,40 @@ export function Calendar({ value, onChange }: CalendarProps) {
     onChange({ checkIn, checkOut: date });
   }
 
+  function handleKeyDown(e: React.KeyboardEvent<HTMLButtonElement>, date: Date) {
+    const keyMoves: Record<string, () => Date | null> = {
+      ArrowLeft: () => addDays(date, -1),
+      ArrowRight: () => addDays(date, 1),
+      ArrowUp: () => addDays(date, -7),
+      ArrowDown: () => addDays(date, 7),
+      Home: () => startOfWeek(date, { weekStartsOn: 1 }),
+      End: () => endOfWeek(date, { weekStartsOn: 1 }),
+      PageUp: () => subMonths(date, 1),
+      PageDown: () => addMonths(date, 1),
+    };
+
+    const move = keyMoves[e.key];
+    if (move) {
+      e.preventDefault();
+      const next = move();
+      if (next) setActiveDate(next);
+      return;
+    }
+
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      selectDate(date);
+    }
+  }
+
+  function dayLabel(date: Date): string {
+    const base = format(date, 'EEEE, d MMMM yyyy');
+    if (isUnavailable(date)) return `${base}, unavailable`;
+    if (value.checkIn && isSameDay(date, value.checkIn)) return `${base}, selected as check-in`;
+    if (value.checkOut && isSameDay(date, value.checkOut)) return `${base}, selected as check-out`;
+    return base;
+  }
+
   function renderMonth(monthStart: Date) {
     const monthEnd = endOfMonth(monthStart);
     const gridStart = startOfWeek(monthStart, { weekStartsOn: 1 });
@@ -104,39 +171,52 @@ export function Calendar({ value, onChange }: CalendarProps) {
 
     return (
       <div>
-        <p className="mb-3 text-center font-display text-lg font-semibold">
+        <p className="mb-3 text-center font-display text-lg font-semibold text-corner-charcoal">
           {format(monthStart, 'MMMM yyyy')}
         </p>
-        <div className="grid grid-cols-7 gap-1 text-center text-[11px] uppercase text-corner-muted">
+        <div className="grid grid-cols-7 gap-1 text-center text-[11px] uppercase text-corner-muted" aria-hidden>
           {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map((d) => (
             <div key={d}>{d}</div>
           ))}
         </div>
         <div className="mt-1 grid grid-cols-7 gap-1">
           {days.map((day) => {
-            const inMonth = day.getMonth() === monthStart.getMonth();
-            const disabled = isDisabled(day);
+            const inMonth = isSameMonth(day, monthStart);
+            const unavailableDay = isUnavailable(day);
             const isCheckIn = value.checkIn && isSameDay(day, value.checkIn);
             const isCheckOut = value.checkOut && isSameDay(day, value.checkOut);
             const inRange =
-              value.checkIn &&
-              value.checkOut &&
-              day > value.checkIn &&
-              day < value.checkOut;
+              value.checkIn && value.checkOut && day > value.checkIn && day < value.checkOut;
+            const isActive = isSameDay(day, activeDate);
+
+            if (!inMonth) {
+              return <div key={day.toISOString()} aria-hidden className="aspect-square" />;
+            }
 
             return (
               <button
                 key={day.toISOString()}
+                ref={(el) => {
+                  if (el) dayRefs.current.set(dayKey(day), el);
+                  else dayRefs.current.delete(dayKey(day));
+                }}
                 type="button"
-                disabled={disabled || !inMonth}
-                onClick={() => handleDayClick(day)}
+                tabIndex={isActive ? 0 : -1}
+                aria-disabled={unavailableDay || undefined}
+                aria-current={isToday(day) ? 'date' : undefined}
+                aria-label={dayLabel(day)}
+                onFocus={() => setActiveDateState(day)}
+                onClick={() => selectDate(day)}
+                onKeyDown={(e) => handleKeyDown(e, day)}
                 className={[
-                  'aspect-square rounded-md text-sm transition-colors',
-                  !inMonth ? 'invisible' : '',
-                  disabled ? 'cursor-not-allowed text-corner-muted/40 line-through' : 'hover:bg-corner-accent/10',
-                  isCheckIn || isCheckOut ? 'bg-corner-accent text-white hover:bg-corner-accent' : '',
-                  inRange ? 'bg-corner-accent/15' : '',
-                  !disabled && !isCheckIn && !isCheckOut && !inRange ? 'text-corner-ink' : '',
+                  'aspect-square rounded-md text-sm transition-colors motion-reduce:transition-none',
+                  unavailableDay
+                    ? 'cursor-not-allowed text-corner-muted/40 line-through'
+                    : 'hover:bg-corner-gold/10',
+                  isCheckIn || isCheckOut ? 'bg-corner-gold text-white hover:bg-corner-gold' : '',
+                  inRange ? 'bg-corner-gold/15' : '',
+                  !unavailableDay && !isCheckIn && !isCheckOut && !inRange ? 'text-corner-charcoal' : '',
+                  isToday(day) && !isCheckIn && !isCheckOut ? 'font-semibold underline decoration-corner-gold' : '',
                 ].join(' ')}
               >
                 {format(day, 'd')}
@@ -148,18 +228,16 @@ export function Calendar({ value, onChange }: CalendarProps) {
     );
   }
 
-  const secondMonth = useMemo(() => addMonths(visibleMonth, 1), [visibleMonth]);
-
   return (
     <div className="card">
       <div className="mb-4 flex items-center justify-between">
         <button
           type="button"
-          onClick={() => setVisibleMonth((m) => addMonths(m, -1))}
-          className="rounded-full border border-corner-border px-3 py-1 text-sm hover:bg-corner-bg"
+          onClick={() => setVisibleMonth((m) => subMonths(m, 1))}
+          className="rounded-full border border-corner-stone p-2 hover:bg-corner-ivory"
           aria-label="Previous month"
         >
-          &larr;
+          <ChevronLeft aria-hidden className="h-4 w-4" />
         </button>
         <span className="text-xs uppercase tracking-wide text-corner-muted">
           Select check-in and check-out
@@ -167,17 +245,21 @@ export function Calendar({ value, onChange }: CalendarProps) {
         <button
           type="button"
           onClick={() => setVisibleMonth((m) => addMonths(m, 1))}
-          className="rounded-full border border-corner-border px-3 py-1 text-sm hover:bg-corner-bg"
+          className="rounded-full border border-corner-stone p-2 hover:bg-corner-ivory"
           aria-label="Next month"
         >
-          &rarr;
+          <ChevronRight aria-hidden className="h-4 w-4" />
         </button>
       </div>
 
       {loading ? (
-        <p className="py-10 text-center text-sm text-corner-muted">Loading availability&hellip;</p>
+        <p role="status" className="py-10 text-center text-sm text-corner-muted">
+          Loading availability&hellip;
+        </p>
       ) : error ? (
-        <p className="py-10 text-center text-sm text-corner-danger">{error}</p>
+        <p role="alert" className="py-10 text-center text-sm text-corner-error">
+          {error}
+        </p>
       ) : (
         <div className="grid grid-cols-1 gap-8 sm:grid-cols-2">
           {renderMonth(visibleMonth)}
@@ -185,9 +267,11 @@ export function Calendar({ value, onChange }: CalendarProps) {
         </div>
       )}
 
-      {hint && <p className="mt-4 text-sm text-corner-warn">{hint}</p>}
+      <p role="status" className={hint ? 'mt-4 text-sm text-corner-warning' : 'sr-only'}>
+        {hint}
+      </p>
 
-      <div className="mt-4 flex items-center justify-between border-t border-corner-border pt-4 text-sm">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-corner-stone pt-4 text-sm">
         <div>
           <span className="text-corner-muted">Check-in: </span>
           <strong>{value.checkIn ? format(value.checkIn, 'd MMM yyyy') : '—'}</strong>
@@ -200,9 +284,9 @@ export function Calendar({ value, onChange }: CalendarProps) {
           <button
             type="button"
             onClick={() => onChange({ checkIn: null, checkOut: null })}
-            className="text-xs text-corner-muted underline hover:text-corner-ink"
+            className="text-xs text-corner-muted underline hover:text-corner-charcoal"
           >
-            Clear
+            Clear dates
           </button>
         )}
       </div>

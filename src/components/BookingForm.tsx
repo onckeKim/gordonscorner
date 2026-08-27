@@ -3,11 +3,10 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Calendar, toIso, type DateRange } from './Calendar';
-import { calculateStayTotal, bookingRules } from '@/lib/config';
-
-function formatZar(amount: number): string {
-  return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount);
-}
+import { PriceBreakdown } from './PriceBreakdown';
+import { Button } from '@/components/ui/Button';
+import { Alert } from '@/components/ui/Alert';
+import { calculateStayTotal } from '@/lib/config';
 
 export function BookingForm() {
   const router = useRouter();
@@ -78,22 +77,12 @@ export function BookingForm() {
         </div>
 
         {pricing && (
-          <div className="rounded-lg bg-corner-bg p-4 text-sm">
-            <div className="flex justify-between">
-              <span className="text-corner-muted">
-                {nights} night{nights === 1 ? '' : 's'}
-              </span>
-              <span>{formatZar(pricing.totalAmount)}</span>
-            </div>
-            <div className="mt-1 flex justify-between font-medium">
-              <span>Deposit due on approval ({Math.round(bookingRules.depositRate * 100)}%)</span>
-              <span>{formatZar(pricing.depositAmount)}</span>
-            </div>
-            <div className="mt-1 flex justify-between text-corner-muted">
-              <span>Balance due later</span>
-              <span>{formatZar(pricing.balanceAmount)}</span>
-            </div>
-          </div>
+          <PriceBreakdown
+            nights={nights}
+            totalAmount={pricing.totalAmount}
+            depositAmount={pricing.depositAmount}
+            balanceAmount={pricing.balanceAmount}
+          />
         )}
 
         <div>
@@ -165,11 +154,11 @@ export function BookingForm() {
           />
         </div>
 
-        {error && <p className="text-sm text-corner-danger">{error}</p>}
+        {error && <Alert variant="error" title="Couldn't send your request" description={error} />}
 
-        <button type="submit" disabled={submitting} className="btn-primary w-full">
-          {submitting ? 'Sending request…' : 'Request to book'}
-        </button>
+        <Button type="submit" loading={submitting} className="w-full">
+          Request to book
+        </Button>
       </div>
     </form>
   );
