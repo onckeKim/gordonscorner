@@ -7,7 +7,21 @@ import { Calendar, toIso, type DateRange } from './Calendar';
 import { PriceBreakdown } from './PriceBreakdown';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
-import { calculateStayTotal, propertyDetails } from '@/lib/config';
+import { calculateStayPricing } from '@/lib/pricing';
+import { propertyDetails } from '@/lib/config';
+
+const COMMON_COUNTRIES = [
+  'South Africa',
+  'United Kingdom',
+  'United States',
+  'Germany',
+  'Netherlands',
+  'Namibia',
+  'Zimbabwe',
+  'Australia',
+  'France',
+  'Botswana',
+];
 
 function GuestCounter({
   label,
@@ -57,13 +71,19 @@ function GuestCounter({
 export function BookingForm() {
   const router = useRouter();
   const [range, setRange] = useState<DateRange>({ checkIn: null, checkOut: null });
-  const [guestName, setGuestName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
+  const [guestCountry, setGuestCountry] = useState('');
   const [adultsCount, setAdultsCount] = useState(2);
   const [childrenCount, setChildrenCount] = useState(0);
+  const [estimatedArrivalTime, setEstimatedArrivalTime] = useState('');
   const [message, setMessage] = useState('');
-  const [policyAgreed, setPolicyAgreed] = useState(false);
+  const [bookingPurpose, setBookingPurpose] = useState('');
+  const [termsAgreed, setTermsAgreed] = useState(false);
+  const [cancellationPolicyAgreed, setCancellationPolicyAgreed] = useState(false);
+  const [communicationConsent, setCommunicationConsent] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,9 +92,13 @@ export function BookingForm() {
       ? Math.round((range.checkOut.getTime() - range.checkIn.getTime()) / (1000 * 60 * 60 * 24))
       : 0;
 
-  const pricing = useMemo(() => (nights > 0 ? calculateStayTotal(nights) : null), [nights]);
+  const pricing = useMemo(
+    () => (range.checkIn && range.checkOut && nights > 0 ? calculateStayPricing(toIso(range.checkIn), toIso(range.checkOut)) : null),
+    [range.checkIn, range.checkOut, nights],
+  );
   const totalGuests = adultsCount + childrenCount;
   const overCapacity = totalGuests > propertyDetails.maxGuests;
+  const canSubmit = termsAgreed && cancellationPolicyAgreed;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -88,8 +112,8 @@ export function BookingForm() {
       setError(`This property sleeps a maximum of ${propertyDetails.maxGuests} guests — please reduce your guest count.`);
       return;
     }
-    if (!policyAgreed) {
-      setError('Please confirm you agree to the house rules and cancellation policy before requesting to book.');
+    if (!canSubmit) {
+      setError('Please accept the booking terms and cancellation policy before requesting to book.');
       return;
     }
 
@@ -99,15 +123,21 @@ export function BookingForm() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          guestName,
+          firstName,
+          lastName,
           guestEmail,
-          guestPhone: guestPhone || undefined,
+          guestPhone,
+          guestCountry,
           checkIn: toIso(range.checkIn),
           checkOut: toIso(range.checkOut),
           adultsCount,
           childrenCount,
+          estimatedArrivalTime: estimatedArrivalTime || undefined,
           message: message || undefined,
-          policyAgreed,
+          bookingPurpose: bookingPurpose || undefined,
+          termsAgreed,
+          cancellationPolicyAgreed,
+          communicationConsent,
         }),
       });
 
@@ -148,52 +178,89 @@ export function BookingForm() {
         {pricing && (
           <PriceBreakdown
             nights={nights}
-            subtotalAmount={pricing.subtotalAmount}
-            additionalFeeAmount={pricing.additionalFeeAmount}
+            subtotalAmount={pricing.accommodationSubtotal}
+            cleaningFeeAmount={pricing.cleaningFeeAmount}
+            serviceFeeAmount={pricing.serviceFeeAmount}
             discountAmount={pricing.discountAmount}
-            totalAmount={pricing.totalAmount}
+            securityDepositAmount={pricing.securityDepositAmount}
+            totalAmount={pricing.totalAccommodationPrice}
             depositAmount={pricing.depositAmount}
             balanceAmount={pricing.balanceAmount}
           />
         )}
 
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label" htmlFor="firstName">
+              First name
+            </label>
+            <input
+              id="firstName"
+              required
+              className="input"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="label" htmlFor="lastName">
+              Last name
+            </label>
+            <input
+              id="lastName"
+              required
+              className="input"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+            />
+          </div>
+        </div>
+
         <div>
-          <label className="label" htmlFor="guestName">
-            Full name
+          <label className="label" htmlFor="guestEmail">
+            Email address
           </label>
           <input
-            id="guestName"
+            id="guestEmail"
+            type="email"
             required
             className="input"
-            value={guestName}
-            onChange={(e) => setGuestName(e.target.value)}
+            value={guestEmail}
+            onChange={(e) => setGuestEmail(e.target.value)}
           />
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="label" htmlFor="guestEmail">
-              Email
-            </label>
-            <input
-              id="guestEmail"
-              type="email"
-              required
-              className="input"
-              value={guestEmail}
-              onChange={(e) => setGuestEmail(e.target.value)}
-            />
-          </div>
-          <div>
             <label className="label" htmlFor="guestPhone">
-              Phone
+              Mobile number
             </label>
             <input
               id="guestPhone"
+              type="tel"
+              required
               className="input"
               value={guestPhone}
               onChange={(e) => setGuestPhone(e.target.value)}
             />
+          </div>
+          <div>
+            <label className="label" htmlFor="guestCountry">
+              Country
+            </label>
+            <input
+              id="guestCountry"
+              required
+              list="country-list"
+              className="input"
+              value={guestCountry}
+              onChange={(e) => setGuestCountry(e.target.value)}
+            />
+            <datalist id="country-list">
+              {COMMON_COUNTRIES.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
           </div>
         </div>
 
@@ -208,9 +275,40 @@ export function BookingForm() {
           )}
         </div>
 
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label" htmlFor="estimatedArrivalTime">
+              Estimated arrival time
+            </label>
+            <input
+              id="estimatedArrivalTime"
+              placeholder="e.g. 15:00"
+              className="input"
+              value={estimatedArrivalTime}
+              onChange={(e) => setEstimatedArrivalTime(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="label" htmlFor="bookingPurpose">
+              Purpose of stay (optional)
+            </label>
+            <select
+              id="bookingPurpose"
+              className="input"
+              value={bookingPurpose}
+              onChange={(e) => setBookingPurpose(e.target.value)}
+            >
+              <option value="">Prefer not to say</option>
+              <option value="leisure">Leisure</option>
+              <option value="business">Business</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+        </div>
+
         <div>
           <label className="label" htmlFor="message">
-            Anything we should know? (optional)
+            Special requests (optional)
           </label>
           <textarea
             id="message"
@@ -221,26 +319,53 @@ export function BookingForm() {
           />
         </div>
 
-        <label className="flex items-start gap-2.5 text-sm text-corner-muted">
-          <input
-            type="checkbox"
-            checked={policyAgreed}
-            onChange={(e) => setPolicyAgreed(e.target.checked)}
-            required
-            className="mt-0.5 h-4 w-4 rounded border-corner-stone text-corner-gold focus:ring-corner-gold"
-          />
-          <span>
-            I agree to the{' '}
-            <a href="/faq#policies" className="text-corner-gold underline hover:no-underline" target="_blank" rel="noreferrer">
-              house rules and cancellation policy
-            </a>
-            .
-          </span>
-        </label>
+        <div className="space-y-2.5 border-t border-corner-stone pt-4">
+          <label className="flex items-start gap-2.5 text-sm text-corner-muted">
+            <input
+              type="checkbox"
+              checked={termsAgreed}
+              onChange={(e) => setTermsAgreed(e.target.checked)}
+              required
+              className="mt-0.5 h-4 w-4 rounded border-corner-stone text-corner-gold focus:ring-corner-gold"
+            />
+            <span>
+              I accept the{' '}
+              <a href="/faq#policies" className="text-corner-gold underline hover:no-underline" target="_blank" rel="noreferrer">
+                booking terms
+              </a>
+              .
+            </span>
+          </label>
+          <label className="flex items-start gap-2.5 text-sm text-corner-muted">
+            <input
+              type="checkbox"
+              checked={cancellationPolicyAgreed}
+              onChange={(e) => setCancellationPolicyAgreed(e.target.checked)}
+              required
+              className="mt-0.5 h-4 w-4 rounded border-corner-stone text-corner-gold focus:ring-corner-gold"
+            />
+            <span>
+              I accept the{' '}
+              <a href="/faq#policies" className="text-corner-gold underline hover:no-underline" target="_blank" rel="noreferrer">
+                cancellation policy
+              </a>
+              .
+            </span>
+          </label>
+          <label className="flex items-start gap-2.5 text-sm text-corner-muted">
+            <input
+              type="checkbox"
+              checked={communicationConsent}
+              onChange={(e) => setCommunicationConsent(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-corner-stone text-corner-gold focus:ring-corner-gold"
+            />
+            <span>I consent to receive booking-related emails and messages about this stay.</span>
+          </label>
+        </div>
 
         {error && <Alert variant="error" title="Couldn't send your request" description={error} />}
 
-        <Button type="submit" loading={submitting} className="w-full" disabled={!policyAgreed}>
+        <Button type="submit" loading={submitting} className="w-full" disabled={!canSubmit}>
           <CheckCircle2 aria-hidden className="h-4 w-4" />
           Request to book
         </Button>

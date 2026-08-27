@@ -1,12 +1,16 @@
 import { redirect, notFound } from 'next/navigation';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
 import { getPaymentProvider } from '@/lib/payments';
+import { markDepositProcessing } from '@/lib/booking/workflow';
 import { siteConfig } from '@/lib/config';
 import type { PaymentType } from '@/types/database';
 
 function formatZar(amount: number): string {
   return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount);
 }
+
+const DEPOSIT_DUE_STATUSES = ['accepted_awaiting_deposit', 'deposit_processing'];
+const BALANCE_DUE_STATUSES = ['confirmed', 'checked_in', 'checked_out'];
 
 export default async function PayPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -22,8 +26,11 @@ export default async function PayPage({ params }: { params: Promise<{ token: str
   }
 
   let type: PaymentType | null = null;
-  if (booking.status === 'accepted') type = 'deposit';
-  else if (booking.status === 'confirmed') type = 'balance';
+  if (DEPOSIT_DUE_STATUSES.includes(booking.status)) {
+    type = 'deposit';
+  } else if (BALANCE_DUE_STATUSES.includes(booking.status) && !booking.balance_paid_at) {
+    type = 'balance';
+  }
 
   if (!type) {
     return (
@@ -37,6 +44,10 @@ export default async function PayPage({ params }: { params: Promise<{ token: str
         </a>
       </div>
     );
+  }
+
+  if (type === 'deposit') {
+    await markDepositProcessing(booking.id);
   }
 
   const amount = type === 'deposit' ? booking.deposit_amount : booking.balance_amount;

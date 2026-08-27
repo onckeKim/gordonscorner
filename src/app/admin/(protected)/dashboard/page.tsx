@@ -6,16 +6,25 @@ import type { BookingStatus } from '@/types/database';
 const FILTERS: { value: BookingStatus | 'all' | 'action_needed'; label: string }[] = [
   { value: 'action_needed', label: 'Needs action' },
   { value: 'all', label: 'All' },
-  { value: 'pending_review', label: 'Pending review' },
-  { value: 'accepted', label: 'Awaiting deposit' },
+  { value: 'submitted', label: 'Submitted' },
+  { value: 'under_review', label: 'Under review' },
+  { value: 'accepted_awaiting_deposit', label: 'Awaiting deposit' },
+  { value: 'deposit_processing', label: 'Deposit processing' },
   { value: 'confirmed', label: 'Confirmed' },
-  { value: 'balance_paid', label: 'Fully paid' },
+  { value: 'checked_in', label: 'Checked in' },
+  { value: 'checked_out', label: 'Checked out' },
   { value: 'declined', label: 'Declined' },
   { value: 'expired', label: 'Expired' },
   { value: 'cancelled', label: 'Cancelled' },
+  { value: 'no_show', label: 'No-show' },
 ];
 
-const ACTION_NEEDED_STATUSES: BookingStatus[] = ['pending_review', 'info_requested', 'dates_proposed'];
+const ACTION_NEEDED_STATUSES: BookingStatus[] = [
+  'submitted',
+  'under_review',
+  'information_required',
+  'alternative_dates_proposed',
+];
 
 function formatZar(amount: number): string {
   return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount);

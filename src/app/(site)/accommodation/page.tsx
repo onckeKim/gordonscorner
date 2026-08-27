@@ -4,7 +4,7 @@ import { AmenitiesGrid } from '@/components/AmenityCard';
 import { FilterableGallery } from '@/components/FilterableGallery';
 import { AccommodationAvailability } from '@/components/AccommodationAvailability';
 import { ButtonLink } from '@/components/ui/Button';
-import { bookingRules, propertyDetails, siteConfig } from '@/lib/config';
+import { bookingRules, propertyDetails, siteConfig, pricingConfig } from '@/lib/config';
 import { propertyIntro, houseFeatures, accessibilityInfo, parkingInfo, safetyInfo, locationSummary } from '@/lib/content/property';
 import { galleryPhotos } from '@/lib/content/gallery';
 
@@ -129,7 +129,7 @@ export default function AccommodationPage() {
         <div className="mx-auto max-w-3xl px-6 py-16 text-center">
           <p className="eyebrow">Pricing</p>
           <h2 className="section-heading mt-3">
-            From {formatZar(bookingRules.nightlyRateZar)} / night
+            From {formatZar(pricingConfig.standardNightlyRateZar)} / night
           </h2>
           <p className="mx-auto mt-3 max-w-md text-corner-muted">
             Minimum stay of {bookingRules.minNights} nights. A {Math.round(bookingRules.depositRate * 100)}%

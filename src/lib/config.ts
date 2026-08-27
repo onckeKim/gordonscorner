@@ -28,6 +28,9 @@ export const siteConfig = {
   /** Shown on the guest booking status page only once a booking is confirmed. */
   emergencyContactName: 'Gordon (property manager)',
   emergencyContactPhone: '+27 82 111 1111',
+  /** IANA time zone the property operates in — all "today"/lead-time/hold-expiry
+   * calculations are anchored to this, not the server's or guest's local time. */
+  timeZone: 'Africa/Johannesburg',
 } as const;
 
 /** Physical facts about the property — capacity, layout, check-in window. */
@@ -43,24 +46,55 @@ export const propertyDetails = {
 export const bookingRules = {
   /** Minimum number of consecutive nights per booking. */
   minNights: 2,
-  /** Maximum nights a single request may span (guardrail, adjust freely). */
+  /** Maximum nights a single request may span — configurable guardrail. */
   maxNights: 21,
-  /** Fraction of the total stay cost due as a deposit once accepted. */
+  /** Fraction of the total accommodation price due as a deposit once accepted. */
   depositRate: 0.5,
   /** Hours an accepted-but-unpaid booking holds its dates before expiring. */
-  holdExpiryHours: 48,
+  holdExpiryHours: 24,
   /** How far in the future guests may book. */
   maxAdvanceBookingDays: 365,
+  /**
+   * Minimum notice required before check-in, in hours — guests cannot
+   * request a check-in date closer than this. Set `sameDayBookingEnabled`
+   * to bypass it entirely (e.g. for a property that accepts walk-in-style
+   * same-day requests).
+   */
+  leadTimeHours: 24,
+  sameDayBookingEnabled: false,
   /** Currency for all monetary values. */
   currency: 'ZAR' as const,
-  /** Nightly rate used to compute totals (ZAR). Adjust seasonally as needed. */
-  nightlyRateZar: 1850,
-  /** Flat additional fee added to every booking (e.g. cleaning). 0 = none. */
-  additionalFeeZar: 0,
-  additionalFeeLabel: 'Cleaning fee',
-  /** Flat discount subtracted from every booking total. 0 = none. */
+} as const;
+
+export const pricingConfig = {
+  /** Standard nightly rate (ZAR), used when no weekend/seasonal rate applies. */
+  standardNightlyRateZar: 1850,
+  /**
+   * Optional override rate for Friday and Saturday nights. Set to null to
+   * charge the standard rate on weekends too.
+   */
+  weekendNightlyRateZar: 2100 as number | null,
+  /**
+   * Optional date-range rate overrides, checked in array order — the first
+   * matching range wins, and a seasonal rate takes precedence over the
+   * weekend rate for any night it covers. Dates are inclusive, ISO
+   * (YYYY-MM-DD), interpreted in `siteConfig.timeZone`.
+   */
+  seasonalRates: [] as { id: string; label: string; startDate: string; endDate: string; nightlyRateZar: number }[],
+  /** Flat cleaning fee added once per booking. 0 = none. */
+  cleaningFeeZar: 450,
+  /** Flat service/booking fee added once per booking. 0 = none. */
+  serviceFeeZar: 0,
+  /** Flat discount subtracted from the accommodation price. 0 = none. */
   discountZar: 0,
   discountLabel: 'Discount',
+  /**
+   * Refundable security/breakage deposit — displayed and recorded on the
+   * booking, but NOT part of the 50/50 deposit/balance split and not
+   * collected through the online payment flow in this build (typically
+   * taken as cash/card on arrival and refunded after checkout). 0 = none.
+   */
+  securityDepositZar: 0,
 } as const;
 
 export const paymentConfig = {
@@ -70,21 +104,3 @@ export const paymentConfig = {
     | 'yoco'
     | 'dev',
 } as const;
-
-export function calculateStayTotal(nights: number): {
-  subtotalAmount: number;
-  additionalFeeAmount: number;
-  discountAmount: number;
-  totalAmount: number;
-  depositAmount: number;
-  balanceAmount: number;
-} {
-  const subtotalAmount = Math.round(nights * bookingRules.nightlyRateZar * 100) / 100;
-  const additionalFeeAmount = bookingRules.additionalFeeZar;
-  const discountAmount = bookingRules.discountZar;
-  const totalAmount =
-    Math.round((subtotalAmount + additionalFeeAmount - discountAmount) * 100) / 100;
-  const depositAmount = Math.round(totalAmount * bookingRules.depositRate * 100) / 100;
-  const balanceAmount = Math.round((totalAmount - depositAmount) * 100) / 100;
-  return { subtotalAmount, additionalFeeAmount, discountAmount, totalAmount, depositAmount, balanceAmount };
-}

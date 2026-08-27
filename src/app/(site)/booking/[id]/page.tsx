@@ -21,6 +21,8 @@ async function getBooking(idOrReference: string) {
   return data;
 }
 
+const CONFIRMED_STATUSES = ['confirmed', 'checked_in', 'checked_out'];
+
 export default async function BookingStatusPage({
   params,
 }: {
@@ -33,7 +35,7 @@ export default async function BookingStatusPage({
     notFound();
   }
 
-  if (booking.status === 'confirmed' || booking.status === 'balance_paid') {
+  if (CONFIRMED_STATUSES.includes(booking.status)) {
     return (
       <div className="mx-auto max-w-2xl px-6 py-16">
         <ConfirmationScreen
@@ -46,7 +48,7 @@ export default async function BookingStatusPage({
           totalAmount={booking.total_amount}
           depositAmount={booking.deposit_amount}
           balanceAmount={booking.balance_amount}
-          balancePaid={booking.status === 'balance_paid'}
+          balancePaid={Boolean(booking.balance_paid_at)}
         />
       </div>
     );
@@ -88,6 +90,11 @@ export default async function BookingStatusPage({
 
         <PriceBreakdown
           nights={booking.nights}
+          subtotalAmount={booking.accommodation_subtotal ?? undefined}
+          cleaningFeeAmount={booking.cleaning_fee_amount}
+          serviceFeeAmount={booking.service_fee_amount}
+          discountAmount={booking.discount_amount}
+          securityDepositAmount={booking.security_deposit_amount}
           totalAmount={booking.total_amount}
           depositAmount={booking.deposit_amount}
           balanceAmount={booking.balance_amount}
@@ -95,7 +102,7 @@ export default async function BookingStatusPage({
           balancePaid={Boolean(booking.balance_paid_at)}
         />
 
-        {booking.status === 'info_requested' && booking.info_request_message && (
+        {booking.status === 'information_required' && booking.info_request_message && (
           <Alert
             variant="warning"
             title="We need a little more information"
@@ -103,7 +110,7 @@ export default async function BookingStatusPage({
           />
         )}
 
-        {booking.status === 'dates_proposed' &&
+        {booking.status === 'alternative_dates_proposed' &&
           booking.proposed_check_in &&
           booking.proposed_check_out && (
             <ProposalResponse
@@ -113,7 +120,7 @@ export default async function BookingStatusPage({
             />
           )}
 
-        {booking.status === 'accepted' && (
+        {(booking.status === 'accepted_awaiting_deposit' || booking.status === 'deposit_processing') && (
           <Alert
             variant="info"
             title="Almost there"
@@ -139,6 +146,10 @@ export default async function BookingStatusPage({
 
         {booking.status === 'cancelled' && (
           <Alert variant="error" title="This booking was cancelled" />
+        )}
+
+        {booking.status === 'no_show' && (
+          <Alert variant="warning" title="Marked as no-show" description={booking.decline_reason ?? undefined} />
         )}
       </div>
     </div>

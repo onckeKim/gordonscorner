@@ -1,18 +1,7 @@
 import Image from 'next/image';
 import { Users, BedDouble, Bath } from 'lucide-react';
 import { ButtonLink } from '@/components/ui/Button';
-import { bookingRules } from '@/lib/config';
-
-interface Fact {
-  icon: typeof Users;
-  label: string;
-}
-
-const FACTS: Fact[] = [
-  { icon: Users, label: 'Sleeps 4' },
-  { icon: BedDouble, label: '2 bedrooms' },
-  { icon: Bath, label: '1 bathroom' },
-];
+import { pricingConfig, propertyDetails, siteConfig } from '@/lib/config';
 
 interface PropertySummaryCardProps {
   imageSrc?: string;
@@ -21,6 +10,12 @@ interface PropertySummaryCardProps {
 }
 
 export function PropertySummaryCard({ imageSrc, imageAlt, className }: PropertySummaryCardProps) {
+  const facts = [
+    { icon: Users, label: `Sleeps ${propertyDetails.maxGuests}` },
+    { icon: BedDouble, label: `${propertyDetails.bedrooms} bedrooms` },
+    { icon: Bath, label: `${propertyDetails.bathrooms} bathroom${propertyDetails.bathrooms === 1 ? '' : 's'}` },
+  ];
+
   return (
     <div className={`overflow-hidden rounded-xl2 border border-corner-stone bg-corner-white shadow-soft ${className ?? ''}`}>
       <div className="relative aspect-[4/3]">
@@ -37,10 +32,10 @@ export function PropertySummaryCard({ imageSrc, imageAlt, className }: PropertyS
       <div className="p-6">
         <p className="eyebrow">Whole property</p>
         <h3 className="mt-2 font-display text-2xl font-semibold text-corner-charcoal">
-          Gordon&rsquo;s Corner
+          {siteConfig.propertyName}
         </h3>
         <ul className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-corner-muted">
-          {FACTS.map((fact) => (
+          {facts.map((fact) => (
             <li key={fact.label} className="flex items-center gap-1.5">
               <fact.icon aria-hidden className="h-4 w-4 text-corner-gold" />
               {fact.label}
@@ -51,7 +46,7 @@ export function PropertySummaryCard({ imageSrc, imageAlt, className }: PropertyS
           <p className="text-sm text-corner-muted">
             From{' '}
             <span className="font-display text-lg font-semibold text-corner-charcoal">
-              R{bookingRules.nightlyRateZar.toLocaleString('en-ZA')}
+              R{pricingConfig.standardNightlyRateZar.toLocaleString('en-ZA')}
             </span>{' '}
             / night
           </p>

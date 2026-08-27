@@ -7,7 +7,8 @@ request before it can proceed.
 ## Stack
 
 Next.js 14 (App Router, TypeScript) · Tailwind CSS · Supabase (Postgres, Auth) ·
-Resend (email) · PayFast (payments, pluggable) · Vercel
+Resend (email) · PayFast (payments, pluggable) · Vercel · date-fns / date-fns-tz
+(timezone-safe date math)
 
 ## Local setup
 
@@ -17,8 +18,9 @@ cp .env.example .env.local
 ```
 
 1. Create a [Supabase](https://supabase.com) project.
-2. In the SQL editor, run every file in `supabase/migrations/` in order
-   (`0001_init.sql`, then `0002_booking_details.sql`).
+2. In the SQL editor, run every file in `supabase/migrations/` **in order**
+   (`0001` → `0005`) — each was validated end-to-end against a real Postgres
+   instance before being committed (see "Booking engine internals" below).
 3. Copy your project URL + anon key + service role key into `.env.local`
    (Settings → API).
 4. Create your first admin user: Authentication → Users → Add user (email +
@@ -33,32 +35,76 @@ cp .env.example .env.local
 
 ## Business rules (see `src/lib/config.ts`)
 
-All business-specific values live in one file — edit it to reconfigure the property
-without touching booking logic:
+All business-specific values live in three exports — edit them to reconfigure the
+property without touching booking logic:
 
-- Minimum stay: 2 nights (`bookingRules.minNights`)
-- Deposit: 50% of the stay total (`bookingRules.depositRate`)
-- Hold window: 48 hours between admin acceptance and required deposit payment
-  (`bookingRules.holdExpiryHours`) — after that, dates are released automatically
-- Nightly rate used for pricing (`bookingRules.nightlyRateZar`)
+- **`bookingRules`** — min stay (2 nights), max stay, deposit rate (50%), hold
+  window (24h — configurable), booking lead time (24h, or `sameDayBookingEnabled`
+  to bypass it), max advance booking window, currency.
+- **`pricingConfig`** — standard/weekend nightly rates, optional date-ranged
+  seasonal rates, cleaning fee, service fee, discount, security deposit.
+- **`propertyDetails`** — max guests, bedrooms, beds, bathrooms, check-in/out times.
+- `siteConfig.timeZone` — the property's IANA time zone (`Africa/Johannesburg`).
+  Every "what's today / is this too soon to book" calculation is anchored to
+  this, never the server's or guest's local time (see `src/lib/timezone.ts`).
 
-## Booking workflow
+## Pricing engine (`src/lib/pricing.ts`)
+
+`calculateStayPricing(checkIn, checkOut)` resolves a rate for **every individual
+night** of the stay (seasonal range match → weekend rate on Fri/Sat nights →
+standard rate, in that priority) and returns the full breakdown: nightly
+rate list, accommodation subtotal, cleaning fee, service fee, discount, total
+accommodation price, 50% deposit, remaining balance, and a separate refundable
+security deposit (not part of the deposit/balance split — collected
+separately, typically on arrival). It has no server-only guard, so the same
+function drives the live estimate on `/book` and the authoritative charge
+`createBookingRequest` computes server-side — **the client never sends an
+amount; nothing it sends can change what a guest is charged.**
+
+## Booking statuses & workflow
 
 ```
-pending_review ──▶ info_requested ──▶ pending_review
-      │
-      ├──▶ dates_proposed ──▶ pending_review (guest accepts) / declined (guest declines)
-      │
-      ├──▶ declined  (dates released)
-      │
-      └──▶ accepted (dates held, deposit link emailed)
-              ├──▶ expired (hold lapses unpaid → dates released)
-              └──▶ confirmed (deposit paid → reference generated, dates blocked,
-                    guest + admin notified)
-                      └──▶ balance_paid (admin marks paid, or guest pays online)
+submitted ──▶ under_review (auto, when an admin opens the request)
+   │            │
+   │            ├──▶ information_required ──▶ under_review (guest replies)
+   │            ├──▶ alternative_dates_proposed ──▶ under_review (guest accepts)
+   │            │                              └──▶ declined (guest declines)
+   │            └──▶ declined (dates released)
+   │
+   └──▶ accepted_awaiting_deposit (dates held, deposit link emailed)
+           ├──▶ expired (hold lapses unpaid → dates released)
+           ├──▶ deposit_processing (guest sent to payment provider)
+           │       ├──▶ confirmed (payment succeeded)
+           │       └──▶ accepted_awaiting_deposit (payment failed/cancelled — retry)
+           └──▶ confirmed (reference generated, dates hard-blocked, guest + admin notified)
+                   ├──▶ checked_in ──▶ checked_out
+                   ├──▶ no_show
+                   └──▶ cancelled (dates released)
 ```
 
-Cancellation is available from `accepted` or `confirmed` at any time.
+`draft` exists in the schema for a possible future save-and-resume form but
+isn't produced by the current single-page booking flow. Balance payment
+(`balance_paid_at`) is tracked as a timestamp independent of status — it
+doesn't gate or change status on its own.
+
+## Preventing double-bookings
+
+Two layers, not one:
+
+1. **`checkAvailability()`** (`src/lib/booking/availability.ts`) — a fast,
+   friendly pre-check: min/max nights, lead time, past dates, max-advance
+   window, and an overlap check against current holds/bookings/blocks. This
+   is what produces a clear error message, but it's inherently racy on its
+   own (two simultaneous requests can both pass it before either commits).
+2. **A database EXCLUDE constraint** (`supabase/migrations/0005_prevent_double_booking.sql`)
+   — `no_overlapping_active_bookings`, using `btree_gist`, rejects any INSERT
+   or UPDATE that would create two overlapping date ranges among
+   `accepted_awaiting_deposit` / `deposit_processing` / `confirmed` /
+   `checked_in` / `checked_out` rows, regardless of application-level races.
+   This was verified directly against Postgres: two concurrent "accepts" on
+   overlapping dates — the second raises a real `23P01 exclusion_violation`,
+   which `acceptBooking()` catches and turns into a `DoubleBookingError` the
+   admin UI shows as a normal error, not a crash.
 
 ## Design system
 
@@ -169,6 +215,9 @@ itself isn't built yet — see "Assumptions & placeholders" below.
 | `/api/bookings/[id]/mark-balance-paid` | POST | Admin: record balance paid |
 | `/api/bookings/[id]/send-balance-link` | POST | Admin: email an online balance-payment link |
 | `/api/bookings/[id]/cancel` | POST | Admin: cancel, release dates |
+| `/api/bookings/[id]/check-in` | POST | Admin: mark a confirmed guest as arrived |
+| `/api/bookings/[id]/check-out` | POST | Admin: mark a checked-in guest as departed |
+| `/api/bookings/[id]/no-show` | POST | Admin: mark a confirmed guest as a no-show |
 | `/api/payments/webhook` | POST | Provider → us: payment notification (ITN) |
 | `/api/cron/expire-holds` | GET | Scheduled: release lapsed holds (see `vercel.json`) |
 | `/api/admin/blocked-dates` | POST | Admin: manually block a date range |
@@ -225,8 +274,17 @@ simulated payments). To go live:
 - Guest identity on the public status page (`/booking/[id]`) is the booking UUID
   or reference acting as a bearer token (the same model as the emailed link) —
   there's no separate guest login.
-- Currency is fixed to ZAR and pricing is a flat nightly rate; seasonal/dynamic
-  pricing would extend `calculateStayTotal` in `src/lib/config.ts`.
+- Currency is fixed to ZAR (`bookingRules.currency`). Weekend/seasonal rates,
+  cleaning/service fees, discounts and the security deposit are all real,
+  configured line items (`pricingConfig` in `src/lib/config.ts`) — every one
+  defaults to "off" (0, or `weekendNightlyRateZar: null`, or an empty
+  `seasonalRates` array) until set.
+- "Booking purpose" is optional on the form (`leisure`/`business`/`other`) —
+  intentionally not required, since it isn't needed to process a booking and
+  the brief was explicit about not collecting unnecessary personal data.
+- `draft` is a valid `booking_status` value with no code path that produces
+  it yet — reserved for a future save-and-resume multi-step form. Every
+  other status in the enum is reachable from the current single-page flow.
 - `Skeleton`/`SkeletonCard`/`LoadingRegion` and `EmptyState` (`components/ui/`)
   are built and ready but not yet wired into a specific loading/empty state on
   any page — every current data fetch either resolves fast enough server-side

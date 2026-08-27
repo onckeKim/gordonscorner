@@ -17,6 +17,9 @@ async function callAction(url: string, body?: Record<string, unknown>) {
   return data;
 }
 
+const REVIEW_STATUSES: Booking['status'][] = ['submitted', 'under_review', 'information_required', 'alternative_dates_proposed'];
+const NO_FURTHER_ACTION_STATUSES: Booking['status'][] = ['declined', 'expired', 'cancelled', 'checked_out', 'no_show', 'draft'];
+
 export function BookingActions({ booking }: { booking: Booking }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -51,9 +54,9 @@ export function BookingActions({ booking }: { booking: Booking }) {
   return (
     <div className="card space-y-4">
       <h2 className="font-display text-lg font-semibold">Actions</h2>
-      {error && <p className="text-sm text-corner-danger">{error}</p>}
+      {error && <p className="text-sm text-corner-error">{error}</p>}
 
-      {(booking.status === 'pending_review' || booking.status === 'info_requested') && (
+      {REVIEW_STATUSES.includes(booking.status) && booking.status !== 'alternative_dates_proposed' && (
         <>
           <button
             disabled={busy}
@@ -129,7 +132,7 @@ export function BookingActions({ booking }: { booking: Booking }) {
           <button
             disabled={busy}
             onClick={() => setShowDecline((s) => !s)}
-            className="w-full text-sm text-corner-danger hover:underline"
+            className="w-full text-sm text-corner-error hover:underline"
           >
             Decline request
           </button>
@@ -145,7 +148,7 @@ export function BookingActions({ booking }: { booking: Booking }) {
               <button
                 disabled={busy}
                 onClick={() => run(() => callAction(`${base}/decline`, { reason: declineReason }))}
-                className="w-full rounded-full bg-corner-danger px-7 py-3 text-sm font-medium text-white hover:opacity-90"
+                className="w-full rounded-full bg-corner-error px-7 py-3 text-sm font-medium text-white hover:opacity-90"
               >
                 Confirm decline
               </button>
@@ -154,10 +157,13 @@ export function BookingActions({ booking }: { booking: Booking }) {
         </>
       )}
 
-      {booking.status === 'accepted' && (
+      {(booking.status === 'accepted_awaiting_deposit' || booking.status === 'deposit_processing') && (
         <>
           <p className="text-sm text-corner-muted">
-            Waiting on the guest to pay their deposit. Dates are held until{' '}
+            {booking.status === 'deposit_processing'
+              ? 'The guest has been sent to the payment provider to pay their deposit.'
+              : 'Waiting on the guest to pay their deposit.'}{' '}
+            Dates are held until{' '}
             {booking.hold_expires_at
               ? new Date(booking.hold_expires_at).toLocaleString('en-ZA')
               : '—'}
@@ -175,37 +181,80 @@ export function BookingActions({ booking }: { booking: Booking }) {
 
       {booking.status === 'confirmed' && (
         <>
+          {booking.balance_paid_at ? (
+            <p className="text-sm text-corner-success">Balance paid.</p>
+          ) : (
+            <>
+              <button
+                disabled={busy}
+                onClick={() => run(() => callAction(`${base}/mark-balance-paid`))}
+                className="btn-primary w-full"
+              >
+                Mark balance as paid
+              </button>
+              <button
+                disabled={busy}
+                onClick={() => run(() => callAction(`${base}/send-balance-link`))}
+                className="btn-secondary w-full"
+              >
+                Email balance payment link
+              </button>
+            </>
+          )}
           <button
             disabled={busy}
-            onClick={() => run(() => callAction(`${base}/mark-balance-paid`))}
-            className="btn-primary w-full"
+            onClick={() => run(() => callAction(`${base}/check-in`))}
+            className="btn-secondary w-full"
           >
-            Mark balance as paid
+            Mark as checked in
           </button>
           <button
             disabled={busy}
-            onClick={() => run(() => callAction(`${base}/send-balance-link`))}
-            className="btn-secondary w-full"
+            onClick={() => run(() => callAction(`${base}/no-show`))}
+            className="w-full text-sm text-corner-error hover:underline"
           >
-            Email balance payment link
+            Mark as no-show
           </button>
           <button
             disabled={busy}
             onClick={() => run(() => callAction(`${base}/cancel`))}
-            className="w-full text-sm text-corner-danger hover:underline"
+            className="w-full text-sm text-corner-error hover:underline"
           >
             Cancel booking
           </button>
         </>
       )}
 
-      {booking.status === 'dates_proposed' && (
+      {booking.status === 'checked_in' && (
+        <>
+          {booking.balance_paid_at ? (
+            <p className="text-sm text-corner-success">Balance paid.</p>
+          ) : (
+            <button
+              disabled={busy}
+              onClick={() => run(() => callAction(`${base}/mark-balance-paid`))}
+              className="btn-primary w-full"
+            >
+              Mark balance as paid
+            </button>
+          )}
+          <button
+            disabled={busy}
+            onClick={() => run(() => callAction(`${base}/check-out`))}
+            className="btn-secondary w-full"
+          >
+            Mark as checked out
+          </button>
+        </>
+      )}
+
+      {booking.status === 'alternative_dates_proposed' && (
         <p className="text-sm text-corner-muted">
           Waiting on the guest to accept or decline the proposed dates.
         </p>
       )}
 
-      {['balance_paid', 'declined', 'expired', 'cancelled'].includes(booking.status) && (
+      {NO_FURTHER_ACTION_STATUSES.includes(booking.status) && (
         <p className="text-sm text-corner-muted">No further action needed.</p>
       )}
     </div>

@@ -1,7 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getPaymentProvider } from '@/lib/payments';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
-import { markDepositPaid, markBalancePaidViaPayment, WorkflowError } from '@/lib/booking/workflow';
+import {
+  markDepositPaid,
+  markDepositFailed,
+  markBalancePaidViaPayment,
+  WorkflowError,
+} from '@/lib/booking/workflow';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,22 +68,26 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  if (event.status === 'paid') {
-    try {
+  try {
+    if (event.status === 'paid') {
       if (event.paymentType === 'deposit') {
         await markDepositPaid(event.bookingId);
       } else {
         await markBalancePaidViaPayment(event.bookingId);
       }
-    } catch (err) {
-      if (!(err instanceof WorkflowError)) {
-        // eslint-disable-next-line no-console
-        console.error('Failed to apply paid webhook to booking:', err);
-        return NextResponse.json({ error: 'Failed to process payment.' }, { status: 500 });
-      }
-      // WorkflowError here typically means the booking was already in a
-      // later state (idempotent replay) — safe to acknowledge as OK.
+    } else if (event.paymentType === 'deposit') {
+      // Failed/cancelled deposit attempt — return to accepted_awaiting_deposit
+      // so the guest can retry from the same link, as long as the hold hasn't lapsed.
+      await markDepositFailed(event.bookingId);
     }
+  } catch (err) {
+    if (!(err instanceof WorkflowError)) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to apply webhook to booking:', err);
+      return NextResponse.json({ error: 'Failed to process payment.' }, { status: 500 });
+    }
+    // WorkflowError here typically means the booking was already in a
+    // later state (idempotent replay) — safe to acknowledge as OK.
   }
 
   return NextResponse.json({ ok: true });

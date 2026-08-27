@@ -9,7 +9,7 @@ import { FAQ } from '@/components/FAQ';
 import { Newsletter } from '@/components/Newsletter';
 import { Alert } from '@/components/ui/Alert';
 import { ButtonLink } from '@/components/ui/Button';
-import { siteConfig, bookingRules, propertyDetails } from '@/lib/config';
+import { siteConfig, bookingRules, propertyDetails, pricingConfig } from '@/lib/config';
 import { propertyIntro, houseFeatures, locationSummary } from '@/lib/content/property';
 import { galleryPhotos } from '@/lib/content/gallery';
 import { testimonials } from '@/lib/content/testimonials';
@@ -61,7 +61,7 @@ export default function HomePage() {
             <div className="card">
               <p className="eyebrow">Price per night</p>
               <p className="mt-2 font-display text-3xl font-semibold text-corner-charcoal">
-                {formatZar(bookingRules.nightlyRateZar)}
+                {formatZar(pricingConfig.standardNightlyRateZar)}
               </p>
               <p className="mt-1 text-sm text-corner-muted">
                 Plus a {Math.round(bookingRules.depositRate * 100)}% deposit to secure your dates.

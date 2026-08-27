@@ -1,14 +1,18 @@
 export type BookingStatus =
-  | 'pending_review'
-  | 'info_requested'
-  | 'dates_proposed'
-  | 'accepted'
-  | 'deposit_paid'
+  | 'draft'
+  | 'submitted'
+  | 'under_review'
+  | 'information_required'
+  | 'alternative_dates_proposed'
+  | 'accepted_awaiting_deposit'
+  | 'deposit_processing'
   | 'confirmed'
-  | 'balance_paid'
   | 'declined'
   | 'expired'
-  | 'cancelled';
+  | 'cancelled'
+  | 'checked_in'
+  | 'checked_out'
+  | 'no_show';
 
 export type PaymentType = 'deposit' | 'balance';
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'cancelled';
@@ -18,17 +22,28 @@ export type Booking = {
   id: string;
   reference: string | null;
   guest_name: string;
+  guest_first_name: string | null;
+  guest_last_name: string | null;
   guest_email: string;
   guest_phone: string | null;
+  guest_country: string | null;
   check_in: string; // ISO date (YYYY-MM-DD)
   check_out: string;
   nights: number;
   guests_count: number;
   adults_count: number | null;
   children_count: number | null;
+  estimated_arrival_time: string | null;
   message: string | null;
+  booking_purpose: string | null;
   status: BookingStatus;
 
+  accommodation_subtotal: number | null;
+  cleaning_fee_amount: number;
+  service_fee_amount: number;
+  discount_amount: number;
+  security_deposit_amount: number;
+  nightly_rate_breakdown: unknown | null;
   total_amount: number;
   deposit_amount: number;
   balance_amount: number;
@@ -46,7 +61,9 @@ export type Booking = {
 
   hold_expires_at: string | null;
   payment_token: string | null;
-  policy_agreed_at: string | null;
+  terms_agreed_at: string | null;
+  cancellation_policy_agreed_at: string | null;
+  communication_consent_at: string | null;
 
   created_at: string;
   updated_at: string;

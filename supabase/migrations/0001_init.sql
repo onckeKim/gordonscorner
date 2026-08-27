@@ -3,6 +3,8 @@
 -- or paste into the Supabase SQL editor.
 
 create extension if not exists "pgcrypto";
+-- Must be created before any trigger references moddatetime(), below.
+create extension if not exists moddatetime schema extensions;
 
 -- ---------------------------------------------------------------------------
 -- ENUM TYPES
@@ -92,10 +94,7 @@ create index bookings_payment_token_idx on bookings (payment_token);
 create trigger set_bookings_updated_at
   before update on bookings
   for each row
-  execute procedure moddatetime(updated_at);
-
--- moddatetime extension provides the trigger function used above
-create extension if not exists moddatetime schema extensions;
+  execute procedure extensions.moddatetime(updated_at);
 
 -- ---------------------------------------------------------------------------
 -- BLOCKED DATES (manual admin holds unrelated to a booking)
@@ -153,7 +152,7 @@ create index payments_provider_reference_idx on payments (provider_reference);
 create trigger set_payments_updated_at
   before update on payments
   for each row
-  execute procedure moddatetime(updated_at);
+  execute procedure extensions.moddatetime(updated_at);
 
 -- ---------------------------------------------------------------------------
 -- ROW LEVEL SECURITY

@@ -1,4 +1,4 @@
-import { bookingRules } from '@/lib/config';
+import { bookingRules, pricingConfig } from '@/lib/config';
 
 function formatZar(amount: number): string {
   return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount);
@@ -6,10 +6,12 @@ function formatZar(amount: number): string {
 
 interface PriceBreakdownProps {
   nights: number;
-  /** Nightly-rate subtotal, before fees/discount. Defaults to nights × nightly rate if omitted. */
+  /** Nightly-rate subtotal, before fees/discount. Defaults to a derived value if omitted. */
   subtotalAmount?: number;
-  additionalFeeAmount?: number;
+  cleaningFeeAmount?: number;
+  serviceFeeAmount?: number;
   discountAmount?: number;
+  securityDepositAmount?: number;
   totalAmount: number;
   depositAmount: number;
   balanceAmount: number;
@@ -22,8 +24,10 @@ interface PriceBreakdownProps {
 export function PriceBreakdown({
   nights,
   subtotalAmount,
-  additionalFeeAmount = 0,
+  cleaningFeeAmount = 0,
+  serviceFeeAmount = 0,
   discountAmount = 0,
+  securityDepositAmount = 0,
   totalAmount,
   depositAmount,
   balanceAmount,
@@ -37,22 +41,32 @@ export function PriceBreakdown({
         <dt className="text-corner-muted">
           {nights} night{nights === 1 ? '' : 's'}
         </dt>
-        <dd>{formatZar(subtotalAmount ?? totalAmount - additionalFeeAmount + discountAmount)}</dd>
+        <dd>
+          {formatZar(
+            subtotalAmount ?? totalAmount - cleaningFeeAmount - serviceFeeAmount + discountAmount,
+          )}
+        </dd>
       </div>
-      {additionalFeeAmount > 0 && (
+      {cleaningFeeAmount > 0 && (
         <div className="flex justify-between py-1 text-corner-muted">
-          <dt>{bookingRules.additionalFeeLabel}</dt>
-          <dd>{formatZar(additionalFeeAmount)}</dd>
+          <dt>Cleaning fee</dt>
+          <dd>{formatZar(cleaningFeeAmount)}</dd>
+        </div>
+      )}
+      {serviceFeeAmount > 0 && (
+        <div className="flex justify-between py-1 text-corner-muted">
+          <dt>Service fee</dt>
+          <dd>{formatZar(serviceFeeAmount)}</dd>
         </div>
       )}
       {discountAmount > 0 && (
         <div className="flex justify-between py-1 text-corner-success">
-          <dt>{bookingRules.discountLabel}</dt>
+          <dt>{pricingConfig.discountLabel}</dt>
           <dd>&minus;{formatZar(discountAmount)}</dd>
         </div>
       )}
-      <div className="flex justify-between border-t border-corner-stone py-1.5 mt-1 font-medium text-corner-charcoal">
-        <dt>Total</dt>
+      <div className="mt-1 flex justify-between border-t border-corner-stone py-1.5 font-medium text-corner-charcoal">
+        <dt>Total accommodation price</dt>
         <dd>{formatZar(totalAmount)}</dd>
       </div>
       <div className="flex justify-between py-1 font-medium text-corner-charcoal">
@@ -75,6 +89,13 @@ export function PriceBreakdown({
         </dt>
         <dd>{formatZar(balanceAmount)}</dd>
       </div>
+      {securityDepositAmount > 0 && (
+        <div className="mt-1 flex justify-between border-t border-corner-stone py-1.5 text-corner-muted">
+          <dt>Security deposit (refundable, paid separately)</dt>
+          <dd>{formatZar(securityDepositAmount)}</dd>
+        </div>
+      )}
+      <p className="mt-2 text-xs text-corner-muted">Prices shown in {bookingRules.currency}.</p>
     </dl>
   );
 }

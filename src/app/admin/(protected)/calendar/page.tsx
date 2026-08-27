@@ -11,7 +11,7 @@ export default async function AdminCalendarPage() {
     supabase
       .from('bookings')
       .select('*')
-      .in('status', ['accepted', 'deposit_paid', 'confirmed', 'balance_paid'])
+      .in('status', ['accepted_awaiting_deposit', 'deposit_processing', 'confirmed', 'checked_in', 'checked_out'])
       .order('check_in', { ascending: true }),
     supabase.from('blocked_dates').select('*').order('start_date', { ascending: true }),
   ]);

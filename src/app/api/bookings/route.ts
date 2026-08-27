@@ -4,17 +4,25 @@ import { createBookingRequest } from '@/lib/booking/workflow';
 import { handleApiError } from '@/lib/api-response';
 
 const bookingRequestSchema = z.object({
-  guestName: z.string().trim().min(2).max(120),
+  firstName: z.string().trim().min(1).max(60),
+  lastName: z.string().trim().min(1).max(60),
   guestEmail: z.string().trim().email(),
-  guestPhone: z.string().trim().max(40).optional(),
+  guestPhone: z.string().trim().min(6).max(40),
+  guestCountry: z.string().trim().min(2).max(60),
   checkIn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   checkOut: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   adultsCount: z.number().int().min(1).max(20),
   childrenCount: z.number().int().min(0).max(20),
+  estimatedArrivalTime: z.string().trim().max(60).optional(),
   message: z.string().trim().max(2000).optional(),
-  policyAgreed: z.literal(true, {
-    errorMap: () => ({ message: 'Please confirm you agree to the house rules and cancellation policy.' }),
+  bookingPurpose: z.enum(['leisure', 'business', 'other']).optional(),
+  termsAgreed: z.literal(true, {
+    errorMap: () => ({ message: 'Please confirm you accept the booking terms.' }),
   }),
+  cancellationPolicyAgreed: z.literal(true, {
+    errorMap: () => ({ message: 'Please confirm you accept the cancellation policy.' }),
+  }),
+  communicationConsent: z.boolean(),
 });
 
 /** Public endpoint: guest submits a new booking request. */
