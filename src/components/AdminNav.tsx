@@ -16,13 +16,18 @@ export function AdminNav() {
   }
 
   const links = [
-    { href: '/admin/dashboard', label: 'Bookings' },
+    { href: '/admin/dashboard', label: 'Dashboard' },
+    { href: '/admin/bookings', label: 'Bookings' },
     { href: '/admin/calendar', label: 'Calendar' },
     { href: '/admin/payments', label: 'Payments' },
+    { href: '/admin/content', label: 'Content' },
+    { href: '/admin/settings', label: 'Settings' },
+    { href: '/admin/audit-log', label: 'Audit log' },
+    { href: '/admin/security', label: 'Security' },
   ];
 
   return (
-    <header className="border-b border-corner-border bg-corner-ink text-corner-bg">
+    <header className="border-b border-corner-border bg-corner-ink text-corner-bg print:hidden">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <div className="flex items-center gap-8">
           <span className="font-display text-lg">Gordon&rsquo;s Corner — Admin</span>

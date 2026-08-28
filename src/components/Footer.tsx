@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { siteConfig } from '@/lib/config';
+import { getContentSection } from '@/lib/content/store';
+import { siteContentDefaults, socialContentDefaults, type SiteContentSection, type SocialContentSection } from '@/lib/content/sections';
 import { Logo } from './Logo';
 
 const EXPLORE_LINKS = [
@@ -16,14 +18,35 @@ const POLICY_LINKS = [
   { href: '/booking/lookup', label: 'Find my booking' },
 ];
 
-export function Footer() {
+export async function Footer() {
+  const [site, social] = await Promise.all([
+    getContentSection<SiteContentSection>('site', siteContentDefaults),
+    getContentSection<SocialContentSection>('social', socialContentDefaults),
+  ]);
+
+  const socialLinks = [
+    { label: 'Instagram', href: social.instagram },
+    { label: 'Facebook', href: social.facebook },
+    { label: 'WhatsApp', href: social.whatsapp },
+    { label: 'TikTok', href: social.tiktok },
+  ].filter((s) => s.href);
+
   return (
     <footer className="bg-corner-forest text-corner-ivory">
       <div className="mx-auto max-w-6xl px-6 py-16">
         <div className="grid gap-12 sm:grid-cols-2 lg:grid-cols-4">
           <div className="lg:col-span-2">
             <Logo dark />
-            <p className="mt-4 max-w-sm text-sm text-corner-ivory/70">{siteConfig.description}</p>
+            <p className="mt-4 max-w-sm text-sm text-corner-ivory/70">{site.description}</p>
+            {socialLinks.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                {socialLinks.map((s) => (
+                  <a key={s.label} href={s.href} target="_blank" rel="noreferrer" className="text-corner-ivory/85 hover:text-corner-gold">
+                    {s.label}
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
 
           <div>
@@ -55,12 +78,12 @@ export function Footer() {
 
         <div className="mt-14 flex flex-col gap-4 border-t border-corner-ivory/15 pt-8 text-sm text-corner-ivory/70 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap gap-x-6 gap-y-1">
-            <span>{siteConfig.address}</span>
-            <a href={`mailto:${siteConfig.contactEmail}`} className="hover:text-corner-gold">
-              {siteConfig.contactEmail}
+            <span>{site.address}</span>
+            <a href={`mailto:${site.contactEmail}`} className="hover:text-corner-gold">
+              {site.contactEmail}
             </a>
-            <a href={`tel:${siteConfig.contactPhone}`} className="hover:text-corner-gold">
-              {siteConfig.contactPhone}
+            <a href={`tel:${site.contactPhone}`} className="hover:text-corner-gold">
+              {site.contactPhone}
             </a>
           </div>
           <p className="text-corner-ivory/50">

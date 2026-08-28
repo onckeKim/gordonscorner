@@ -1,13 +1,17 @@
 import { bookingRules, pricingConfig } from '@/lib/config';
 import { isoDateRange, isoDateWeekday } from '@/lib/date-utils';
+import type { DateRateOverride } from '@/types/database';
 
 /**
  * The full pricing engine. Isomorphic (no 'server-only') so the booking
  * form can show a live estimate in the browser — but the server is always
  * the source of truth: `createBookingRequest` (src/lib/booking/workflow.ts)
- * calls this function itself and ignores any amounts the client sends, so a
+ * calls this function itself, passing the live admin-configured settings
+ * and date-rate overrides, and ignores any amounts the client sends, so a
  * tampered browser request can never change what a guest is actually
- * charged.
+ * charged. A caller with no `PricingInputs` falls back to the static
+ * defaults in config.ts (used only for an initial client-side estimate
+ * before settings have loaded).
  */
 
 export type NightlyRateType = 'standard' | 'weekend' | 'seasonal';
@@ -27,13 +31,29 @@ export interface StayPricing {
   cleaningFeeAmount: number;
   serviceFeeAmount: number;
   discountAmount: number;
-  /** accommodationSubtotal + fees - discount. What the 50/50 split is based on. */
+  taxAmount: number;
+  /** accommodationSubtotal + fees + tax - discount. What the deposit/balance split is based on. */
   totalAccommodationPrice: number;
   depositAmount: number;
   balanceAmount: number;
   /** Refundable security/breakage deposit — shown, not part of the split above. */
   securityDepositAmount: number;
   currency: string;
+}
+
+/** Live, admin-configurable values a caller can pass instead of the config.ts defaults. */
+export interface PricingInputs {
+  standardNightlyRate?: number;
+  weekendNightlyRate?: number | null;
+  cleaningFee?: number;
+  serviceFee?: number;
+  discount?: number;
+  taxRatePercent?: number;
+  securityDeposit?: number;
+  depositRate?: number;
+  currency?: string;
+  /** Date-specific/seasonal overrides, first match (by array order) wins. */
+  dateOverrides?: Pick<DateRateOverride, 'start_date' | 'end_date' | 'label' | 'nightly_rate'>[];
 }
 
 function round2(n: number): number {
@@ -46,31 +66,46 @@ function isWeekendNight(dateIso: string): boolean {
   return day === 5 || day === 6;
 }
 
-function findSeasonalRate(dateIso: string) {
-  return pricingConfig.seasonalRates.find((r) => dateIso >= r.startDate && dateIso <= r.endDate);
-}
-
-function getNightlyRate(dateIso: string): NightlyRateEntry {
-  const seasonal = findSeasonalRate(dateIso);
-  if (seasonal) {
-    return { date: dateIso, rateZar: seasonal.nightlyRateZar, rateType: 'seasonal', label: seasonal.label };
-  }
-  if (pricingConfig.weekendNightlyRateZar != null && isWeekendNight(dateIso)) {
-    return { date: dateIso, rateZar: pricingConfig.weekendNightlyRateZar, rateType: 'weekend' };
-  }
-  return { date: dateIso, rateZar: pricingConfig.standardNightlyRateZar, rateType: 'standard' };
-}
-
-export function calculateStayPricing(checkIn: string, checkOut: string): StayPricing {
-  const nightlyBreakdown = isoDateRange(checkIn, checkOut).map(getNightlyRate);
-  const accommodationSubtotal = round2(nightlyBreakdown.reduce((sum, n) => sum + n.rateZar, 0));
-  const cleaningFeeAmount = pricingConfig.cleaningFeeZar;
-  const serviceFeeAmount = pricingConfig.serviceFeeZar;
-  const discountAmount = pricingConfig.discountZar;
-  const totalAccommodationPrice = round2(
-    accommodationSubtotal + cleaningFeeAmount + serviceFeeAmount - discountAmount,
+function findOverride(dateIso: string, overrides: PricingInputs['dateOverrides']) {
+  return overrides?.find(
+    (r) => r.nightly_rate != null && dateIso >= r.start_date && dateIso < r.end_date,
   );
-  const depositAmount = round2(totalAccommodationPrice * bookingRules.depositRate);
+}
+
+function getNightlyRate(dateIso: string, inputs: Required<Omit<PricingInputs, 'depositRate' | 'currency'>>): NightlyRateEntry {
+  const override = findOverride(dateIso, inputs.dateOverrides);
+  if (override) {
+    return { date: dateIso, rateZar: override.nightly_rate as number, rateType: 'seasonal', label: override.label ?? undefined };
+  }
+  if (inputs.weekendNightlyRate != null && isWeekendNight(dateIso)) {
+    return { date: dateIso, rateZar: inputs.weekendNightlyRate, rateType: 'weekend' };
+  }
+  return { date: dateIso, rateZar: inputs.standardNightlyRate, rateType: 'standard' };
+}
+
+export function calculateStayPricing(checkIn: string, checkOut: string, overrides?: PricingInputs): StayPricing {
+  const inputs = {
+    standardNightlyRate: overrides?.standardNightlyRate ?? pricingConfig.standardNightlyRateZar,
+    weekendNightlyRate: overrides?.weekendNightlyRate ?? pricingConfig.weekendNightlyRateZar,
+    cleaningFee: overrides?.cleaningFee ?? pricingConfig.cleaningFeeZar,
+    serviceFee: overrides?.serviceFee ?? pricingConfig.serviceFeeZar,
+    discount: overrides?.discount ?? pricingConfig.discountZar,
+    taxRatePercent: overrides?.taxRatePercent ?? 0,
+    securityDeposit: overrides?.securityDeposit ?? pricingConfig.securityDepositZar,
+    dateOverrides: overrides?.dateOverrides ?? [],
+  };
+  const depositRate = overrides?.depositRate ?? bookingRules.depositRate;
+  const currency = overrides?.currency ?? bookingRules.currency;
+
+  const nightlyBreakdown = isoDateRange(checkIn, checkOut).map((d) => getNightlyRate(d, inputs));
+  const accommodationSubtotal = round2(nightlyBreakdown.reduce((sum, n) => sum + n.rateZar, 0));
+  const cleaningFeeAmount = inputs.cleaningFee;
+  const serviceFeeAmount = inputs.serviceFee;
+  const discountAmount = inputs.discount;
+  const taxableAmount = accommodationSubtotal + cleaningFeeAmount + serviceFeeAmount - discountAmount;
+  const taxAmount = round2(taxableAmount * (inputs.taxRatePercent / 100));
+  const totalAccommodationPrice = round2(taxableAmount + taxAmount);
+  const depositAmount = round2(totalAccommodationPrice * depositRate);
   const balanceAmount = round2(totalAccommodationPrice - depositAmount);
 
   return {
@@ -80,10 +115,11 @@ export function calculateStayPricing(checkIn: string, checkOut: string): StayPri
     cleaningFeeAmount,
     serviceFeeAmount,
     discountAmount,
+    taxAmount,
     totalAccommodationPrice,
     depositAmount,
     balanceAmount,
-    securityDepositAmount: pricingConfig.securityDepositZar,
-    currency: bookingRules.currency,
+    securityDepositAmount: inputs.securityDeposit,
+    currency,
   };
 }

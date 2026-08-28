@@ -1,14 +1,56 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, Minus, Plus } from 'lucide-react';
 import { Calendar, toIso, type DateRange } from './Calendar';
 import { PriceBreakdown } from './PriceBreakdown';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
-import { calculateStayPricing } from '@/lib/pricing';
+import { calculateStayPricing, type PricingInputs } from '@/lib/pricing';
 import { propertyDetails } from '@/lib/config';
+import type { PublicSettings } from '@/lib/settings';
+
+/**
+ * Fetched once on mount from /api/settings/public so the live estimate
+ * reflects whatever an admin has configured (rates, fees, deposit %, guest
+ * capacity) instead of the static config.ts defaults baked in at build
+ * time. Falls back to those defaults if the fetch fails — this is only a
+ * preview; the server always recalculates authoritatively on submit.
+ */
+function useLivePricingInputs() {
+  const [settings, setSettings] = useState<PublicSettings | null>(null);
+  const [pricingInputs, setPricingInputs] = useState<PricingInputs | undefined>(undefined);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/settings/public')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return;
+        setSettings(data.settings);
+        setPricingInputs({
+          standardNightlyRate: data.settings.defaultNightlyRate,
+          weekendNightlyRate: data.settings.weekendNightlyRate,
+          cleaningFee: data.settings.cleaningFee,
+          serviceFee: data.settings.serviceFee,
+          taxRatePercent: data.settings.taxRatePercent,
+          securityDeposit: data.settings.securityDeposit,
+          depositRate: data.settings.depositPercentage / 100,
+          currency: data.settings.currency,
+          dateOverrides: data.rateOverrides,
+        });
+      })
+      .catch(() => {
+        // Preview stays on config.ts defaults; the server is authoritative anyway.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { settings, pricingInputs };
+}
 
 const COMMON_COUNTRIES = [
   'South Africa',
@@ -87,17 +129,23 @@ export function BookingForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const { settings: liveSettings, pricingInputs } = useLivePricingInputs();
+
   const nights =
     range.checkIn && range.checkOut
       ? Math.round((range.checkOut.getTime() - range.checkIn.getTime()) / (1000 * 60 * 60 * 24))
       : 0;
 
   const pricing = useMemo(
-    () => (range.checkIn && range.checkOut && nights > 0 ? calculateStayPricing(toIso(range.checkIn), toIso(range.checkOut)) : null),
-    [range.checkIn, range.checkOut, nights],
+    () =>
+      range.checkIn && range.checkOut && nights > 0
+        ? calculateStayPricing(toIso(range.checkIn), toIso(range.checkOut), pricingInputs)
+        : null,
+    [range.checkIn, range.checkOut, nights, pricingInputs],
   );
+  const maxGuests = liveSettings?.guestCapacity ?? propertyDetails.maxGuests;
   const totalGuests = adultsCount + childrenCount;
-  const overCapacity = totalGuests > propertyDetails.maxGuests;
+  const overCapacity = totalGuests > maxGuests;
   const canSubmit = termsAgreed && cancellationPolicyAgreed;
 
   async function handleSubmit(e: React.FormEvent) {
@@ -109,7 +157,7 @@ export function BookingForm() {
       return;
     }
     if (overCapacity) {
-      setError(`This property sleeps a maximum of ${propertyDetails.maxGuests} guests — please reduce your guest count.`);
+      setError(`This property sleeps a maximum of ${maxGuests} guests — please reduce your guest count.`);
       return;
     }
     if (!canSubmit) {
@@ -182,10 +230,12 @@ export function BookingForm() {
             cleaningFeeAmount={pricing.cleaningFeeAmount}
             serviceFeeAmount={pricing.serviceFeeAmount}
             discountAmount={pricing.discountAmount}
+            taxAmount={pricing.taxAmount}
             securityDepositAmount={pricing.securityDepositAmount}
             totalAmount={pricing.totalAccommodationPrice}
             depositAmount={pricing.depositAmount}
             balanceAmount={pricing.balanceAmount}
+            currency={pricing.currency}
           />
         )}
 
@@ -270,7 +320,7 @@ export function BookingForm() {
           <GuestCounter label="Children" hint="Under 12" value={childrenCount} onChange={setChildrenCount} />
           {overCapacity && (
             <p className="text-xs text-corner-error">
-              Maximum {propertyDetails.maxGuests} guests — you have {totalGuests}.
+              Maximum {maxGuests} guests — you have {totalGuests}.
             </p>
           )}
         </div>

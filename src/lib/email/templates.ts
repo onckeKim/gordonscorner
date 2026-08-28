@@ -1,4 +1,4 @@
-import { siteConfig, bookingRules } from '@/lib/config';
+import { siteConfig } from '@/lib/config';
 import type { Booking, Payment } from '@/types/database';
 
 export interface EmailContent {
@@ -15,8 +15,18 @@ function formatDate(iso: string): string {
   });
 }
 
-function formatZar(amount: number): string {
-  return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount);
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('en-ZA', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatZar(amount: number, currency = 'ZAR'): string {
+  return new Intl.NumberFormat('en-ZA', { style: 'currency', currency }).format(amount);
 }
 
 function shell(title: string, bodyHtml: string): string {
@@ -44,7 +54,7 @@ function bookingSummary(booking: Booking): string {
       <tr><td style="padding:4px 0;color:#6F6A63;">Check-out</td><td style="padding:4px 0;text-align:right;">${formatDate(booking.check_out)}</td></tr>
       <tr><td style="padding:4px 0;color:#6F6A63;">Nights</td><td style="padding:4px 0;text-align:right;">${booking.nights}</td></tr>
       <tr><td style="padding:4px 0;color:#6F6A63;">Guests</td><td style="padding:4px 0;text-align:right;">${booking.guests_count}</td></tr>
-      <tr><td style="padding:4px 0;color:#6F6A63;">Total</td><td style="padding:4px 0;text-align:right;">${formatZar(booking.total_amount)}</td></tr>
+      <tr><td style="padding:4px 0;color:#6F6A63;">Total</td><td style="padding:4px 0;text-align:right;">${formatZar(booking.total_amount, booking.currency)}</td></tr>
     </table>`;
 }
 
@@ -69,11 +79,14 @@ export function adminNewRequestEmail(booking: Booking): EmailContent {
 }
 
 export function depositLinkEmail(booking: Booking, paymentUrl: string): EmailContent {
+  const depositPercent =
+    booking.total_amount > 0 ? Math.round((booking.deposit_amount / booking.total_amount) * 100) : 50;
+  const heldUntil = booking.hold_expires_at ? ` until ${formatDateTime(booking.hold_expires_at)}` : '';
   return {
     subject: `Your booking is approved — secure it with a deposit`,
     html: shell(
       'Good news — your stay is approved',
-      `<p>Please secure your booking with a ${Math.round(bookingRules.depositRate * 100)}% deposit of <strong>${formatZar(booking.deposit_amount)}</strong>. Your dates are held for ${bookingRules.holdExpiryHours} hours.</p>
+      `<p>Please secure your booking with a ${depositPercent}% deposit of <strong>${formatZar(booking.deposit_amount, booking.currency)}</strong>. Your dates are held${heldUntil}.</p>
        ${bookingSummary(booking)}
        <p style="text-align:center;margin:28px 0;">
          <a href="${paymentUrl}" style="background:#B4852D;color:#fff;padding:12px 28px;border-radius:999px;text-decoration:none;font-size:15px;">Pay deposit securely</a>
@@ -122,7 +135,7 @@ export function bookingConfirmedEmail(booking: Booking): EmailContent {
       `<p>Your deposit has been received and your stay is confirmed.</p>
        <p style="font-size:18px;letter-spacing:0.06em;"><strong>${booking.reference}</strong></p>
        ${bookingSummary(booking)}
-       <p>Remaining balance due: <strong>${formatZar(booking.balance_amount)}</strong> (payable on arrival or as arranged).</p>
+       <p>Remaining balance due: <strong>${formatZar(booking.balance_amount, booking.currency)}</strong> (payable on arrival or as arranged).</p>
        <p>View your booking anytime: <a href="${siteConfig.siteUrl}/booking/${booking.id}">${siteConfig.siteUrl}/booking/${booking.id}</a></p>`,
     ),
   };
@@ -143,7 +156,7 @@ export function balancePaymentLinkEmail(booking: Booking, paymentUrl: string): E
     subject: `Settle your remaining balance — ${booking.reference}`,
     html: shell(
       'Remaining balance',
-      `<p>Your remaining balance of <strong>${formatZar(booking.balance_amount)}</strong> is due.</p>
+      `<p>Your remaining balance of <strong>${formatZar(booking.balance_amount, booking.currency)}</strong> is due.</p>
        <p style="text-align:center;margin:28px 0;">
          <a href="${paymentUrl}" style="background:#B4852D;color:#fff;padding:12px 28px;border-radius:999px;text-decoration:none;font-size:15px;">Pay balance securely</a>
        </p>`,
@@ -159,7 +172,7 @@ export function receiptEmail(booking: Booking, payment: Payment): EmailContent {
       'Payment receipt',
       `<p>Thank you — we've received your ${payment.type === 'deposit' ? 'deposit' : 'balance'} payment.</p>
        <table style="width:100%;border-collapse:collapse;margin:16px 0;">
-         <tr><td style="padding:4px 0;color:#6F6A63;">Amount paid</td><td style="padding:4px 0;text-align:right;"><strong>${formatZar(payment.amount)}</strong></td></tr>
+         <tr><td style="padding:4px 0;color:#6F6A63;">Amount paid</td><td style="padding:4px 0;text-align:right;"><strong>${formatZar(payment.amount, booking.currency)}</strong></td></tr>
          <tr><td style="padding:4px 0;color:#6F6A63;">Currency</td><td style="padding:4px 0;text-align:right;">${booking.currency}</td></tr>
          <tr><td style="padding:4px 0;color:#6F6A63;">Date</td><td style="padding:4px 0;text-align:right;">${formatDate(paidAt)}</td></tr>
          <tr><td style="padding:4px 0;color:#6F6A63;">Payment method</td><td style="padding:4px 0;text-align:right;text-transform:capitalize;">${payment.provider}</td></tr>
@@ -179,7 +192,7 @@ export function refundEmail(booking: Booking, payment: Payment): EmailContent {
       'Refund confirmation',
       `<p>A refund has been recorded for your booking.</p>
        <table style="width:100%;border-collapse:collapse;margin:16px 0;">
-         <tr><td style="padding:4px 0;color:#6F6A63;">Amount refunded</td><td style="padding:4px 0;text-align:right;"><strong>${formatZar(payment.amount)}</strong></td></tr>
+         <tr><td style="padding:4px 0;color:#6F6A63;">Amount refunded</td><td style="padding:4px 0;text-align:right;"><strong>${formatZar(payment.amount, booking.currency)}</strong></td></tr>
          <tr><td style="padding:4px 0;color:#6F6A63;">Date</td><td style="padding:4px 0;text-align:right;">${formatDate(payment.paid_at ?? payment.created_at)}</td></tr>
          ${payment.admin_note ? `<tr><td style="padding:4px 0;color:#6F6A63;">Note</td><td style="padding:4px 0;text-align:right;">${payment.admin_note}</td></tr>` : ''}
        </table>
@@ -194,7 +207,7 @@ export function paymentLinkResentEmail(booking: Booking, paymentUrl: string, typ
     subject: `Your payment link — ${booking.reference ?? booking.id.slice(0, 8)}`,
     html: shell(
       'Here’s your payment link again',
-      `<p>As requested, here's a fresh link to pay your ${type === 'deposit' ? 'deposit' : 'remaining balance'} of <strong>${formatZar(amount)}</strong>.</p>
+      `<p>As requested, here's a fresh link to pay your ${type === 'deposit' ? 'deposit' : 'remaining balance'} of <strong>${formatZar(amount, booking.currency)}</strong>.</p>
        <p style="text-align:center;margin:28px 0;">
          <a href="${paymentUrl}" style="background:#B4852D;color:#fff;padding:12px 28px;border-radius:999px;text-decoration:none;font-size:15px;">Pay securely</a>
        </p>`,

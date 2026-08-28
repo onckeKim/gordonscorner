@@ -49,6 +49,7 @@ export type Booking = {
   cleaning_fee_amount: number;
   service_fee_amount: number;
   discount_amount: number;
+  tax_amount: number;
   security_deposit_amount: number;
   nightly_rate_breakdown: unknown | null;
   total_amount: number;
@@ -128,10 +129,12 @@ export type PaymentEvent = {
   created_at: string;
 }
 
+export type ProfileRole = 'admin' | 'staff';
+
 export type Profile = {
   id: string;
   email: string;
-  role: 'admin';
+  role: ProfileRole;
   created_at: string;
 }
 
@@ -139,6 +142,92 @@ export type UnavailableRange = {
   start_date: string;
   end_date: string;
   status: string;
+}
+
+export type AdminAuditLogEntry = {
+  id: string;
+  actor_id: string | null;
+  actor_email: string | null;
+  action: string;
+  record_type: string;
+  record_id: string | null;
+  changes: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export type LoginAttempt = {
+  id: string;
+  email: string;
+  success: boolean;
+  ip: string | null;
+  created_at: string;
+}
+
+export type Settings = {
+  id: true;
+  property_name: string;
+  currency: string;
+  time_zone: string;
+
+  default_nightly_rate: number;
+  weekend_nightly_rate: number | null;
+  deposit_percentage: number;
+
+  min_nights: number;
+  max_nights: number;
+  guest_capacity: number;
+
+  lead_time_hours: number;
+  same_day_booking_enabled: boolean;
+  max_advance_booking_days: number;
+  hold_period_hours: number;
+
+  tax_rate_percent: number;
+  cleaning_fee: number;
+  service_fee: number;
+  security_deposit: number;
+
+  payment_deadline_hours: number;
+  balance_payment_deadline_days: number;
+  cancellation_policy: string;
+
+  admin_notification_email: string;
+  check_in_time: string;
+  check_out_time: string;
+
+  updated_at: string;
+  updated_by: string | null;
+}
+
+export type DateRateOverride = {
+  id: string;
+  start_date: string;
+  end_date: string;
+  label: string | null;
+  nightly_rate: number | null;
+  min_nights: number | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ContentSection = {
+  key: string;
+  value: unknown;
+  updated_at: string;
+  updated_by: string | null;
+}
+
+export type GuestCommunicationChannel = 'email' | 'phone' | 'whatsapp' | 'sms' | 'in_person' | 'other';
+
+export type GuestCommunication = {
+  id: string;
+  booking_id: string;
+  channel: GuestCommunicationChannel;
+  direction: 'outbound' | 'inbound';
+  summary: string;
+  logged_by: string | null;
+  created_at: string;
 }
 
 /** Minimal typed shape for the Supabase generated Database type. */
@@ -181,6 +270,42 @@ export type Database = {
         Row: Profile;
         Insert: Partial<Profile> & Pick<Profile, 'id' | 'email'>;
         Update: Partial<Profile>;
+        Relationships: [];
+      };
+      admin_audit_log: {
+        Row: AdminAuditLogEntry;
+        Insert: Partial<AdminAuditLogEntry> & Pick<AdminAuditLogEntry, 'action' | 'record_type'>;
+        Update: Partial<AdminAuditLogEntry>;
+        Relationships: [];
+      };
+      login_attempts: {
+        Row: LoginAttempt;
+        Insert: Partial<LoginAttempt> & Pick<LoginAttempt, 'email' | 'success'>;
+        Update: Partial<LoginAttempt>;
+        Relationships: [];
+      };
+      settings: {
+        Row: Settings;
+        Insert: Partial<Settings>;
+        Update: Partial<Settings>;
+        Relationships: [];
+      };
+      date_rate_overrides: {
+        Row: DateRateOverride;
+        Insert: Partial<DateRateOverride> & Pick<DateRateOverride, 'start_date' | 'end_date'>;
+        Update: Partial<DateRateOverride>;
+        Relationships: [];
+      };
+      content_sections: {
+        Row: ContentSection;
+        Insert: Partial<ContentSection> & Pick<ContentSection, 'key' | 'value'>;
+        Update: Partial<ContentSection>;
+        Relationships: [];
+      };
+      guest_communications: {
+        Row: GuestCommunication;
+        Insert: Partial<GuestCommunication> & Pick<GuestCommunication, 'booking_id' | 'summary'>;
+        Update: Partial<GuestCommunication>;
         Relationships: [];
       };
     };

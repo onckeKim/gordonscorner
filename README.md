@@ -19,47 +19,64 @@ cp .env.example .env.local
 
 1. Create a [Supabase](https://supabase.com) project.
 2. In the SQL editor, run every file in `supabase/migrations/` **in order**
-   (`0001` → `0005`) — each was validated end-to-end against a real Postgres
+   (`0001` → `0008`) — each was validated end-to-end against a real Postgres
    instance before being committed (see "Booking engine internals" below).
 3. Copy your project URL + anon key + service role key into `.env.local`
    (Settings → API).
 4. Create your first admin user: Authentication → Users → Add user (email +
    password), then in the SQL editor:
    ```sql
-   insert into profiles (id, email) values ('<the new user's UUID>', '<their email>');
+   insert into profiles (id, email, role) values ('<the new user's UUID>', '<their email>', 'admin');
    ```
+   `role` is `'admin'` (full access — settings, content, team, audit log) or
+   `'staff'` (day-to-day bookings/calendar/payments only). Give the first
+   account `admin` — see "Admin portal" below for the full RBAC picture.
 5. Leave `RESEND_API_KEY` and `PAYMENT_PROVIDER` unset (or `PAYMENT_PROVIDER=dev`) —
    emails print to the server console and payments use the built-in simulator, so
    you can exercise the entire flow with zero external accounts.
 6. `npm run dev` → http://localhost:3000. Admin is at `/admin/login`.
 
-## Business rules (see `src/lib/config.ts`)
+## Business rules — now admin-configurable (`src/lib/settings.ts` + `/admin/settings`)
 
-All business-specific values live in three exports — edit them to reconfigure the
-property without touching booking logic:
+Every operating rule listed below is a row in the DB-backed `settings` table
+(migration `0007`, always exactly one row) — an admin can change any of them
+from `/admin/settings` and the effect is immediate, no redeploy needed:
+property name, currency, time zone, default/weekend nightly rate, deposit
+percentage, min/max stay, guest capacity, booking lead time (+ same-day
+toggle), max advance-booking window, temporary hold period, tax rate,
+cleaning fee, service fee, security deposit, deposit/balance payment
+deadlines, cancellation rules, admin notification email, check-in/out times.
 
-- **`bookingRules`** — min stay (2 nights), max stay, deposit rate (50%), hold
-  window (24h — configurable), booking lead time (24h, or `sameDayBookingEnabled`
-  to bypass it), max advance booking window, currency.
-- **`pricingConfig`** — standard/weekend nightly rates, optional date-ranged
-  seasonal rates, cleaning fee, service fee, discount, security deposit.
-- **`propertyDetails`** — max guests, bedrooms, beds, bathrooms, check-in/out times.
-- `siteConfig.timeZone` — the property's IANA time zone (`Africa/Johannesburg`).
-  Every "what's today / is this too soon to book" calculation is anchored to
-  this, never the server's or guest's local time (see `src/lib/timezone.ts`).
+`src/lib/config.ts` still holds the **static fallback defaults** (used to
+seed the settings row and as a belt-and-braces fallback if it's ever
+missing) — edit it only to change what a fresh database starts with, not to
+reconfigure a running property. `src/lib/settings.ts:getSettings()` (cached
+per-request) is what every server-side decision — pricing, availability,
+hold expiry — actually reads.
 
 ## Pricing engine (`src/lib/pricing.ts`)
 
-`calculateStayPricing(checkIn, checkOut)` resolves a rate for **every individual
-night** of the stay (seasonal range match → weekend rate on Fri/Sat nights →
-standard rate, in that priority) and returns the full breakdown: nightly
-rate list, accommodation subtotal, cleaning fee, service fee, discount, total
-accommodation price, 50% deposit, remaining balance, and a separate refundable
-security deposit (not part of the deposit/balance split — collected
-separately, typically on arrival). It has no server-only guard, so the same
-function drives the live estimate on `/book` and the authoritative charge
-`createBookingRequest` computes server-side — **the client never sends an
-amount; nothing it sends can change what a guest is charged.**
+`calculateStayPricing(checkIn, checkOut, overrides?)` resolves a rate for
+**every individual night** of the stay (date-specific/seasonal override →
+weekend rate on Fri/Sat nights → standard rate, in that priority) and
+returns the full breakdown: nightly rate list, accommodation subtotal,
+cleaning fee, service fee, discount, tax, total accommodation price,
+deposit, remaining balance, and a separate refundable security deposit (not
+part of the deposit/balance split — collected separately, typically on
+arrival). The optional `overrides` parameter is how live, admin-configured
+values reach it: `getEffectivePricingInputs()` (`src/lib/settings.ts`)
+fetches the current `settings` row and `date_rate_overrides` table and
+builds it — `createBookingRequest` (the authoritative charge) always calls
+this server-side; **the client never sends an amount; nothing it sends can
+change what a guest is charged.** The public booking form fetches the same
+live values once on mount from `/api/settings/public` for an accurate
+estimate, falling back to the static `config.ts` defaults if that fails.
+
+Seasonal/date-specific rates and per-range minimum-stay rules live in
+`date_rate_overrides` (migration `0008`, editable from `/admin/calendar`) —
+the first range (by creation order) covering a date wins, same precedence
+the old hardcoded array used. Weekend rate is a single
+`settings.weekend_nightly_rate` value (a day-of-week rule, not a range).
 
 ## Booking statuses & workflow
 
@@ -105,6 +122,100 @@ Two layers, not one:
    overlapping dates — the second raises a real `23P01 exclusion_violation`,
    which `acceptBooking()` catches and turns into a `DoubleBookingError` the
    admin UI shows as a normal error, not a crash.
+
+## Admin portal
+
+The entire `/admin/*` tree is gated by `src/middleware.ts` (redirects signed-
+out visitors to `/admin/login`) — nothing under it is reachable by an
+ordinary site visitor.
+
+**Login & account security**
+- Email/password sign-in goes through `POST /api/admin/auth/login`
+  (`src/app/api/admin/auth/login/route.ts`), a server route rather than a
+  client-only `signInWithPassword()` call — this is what lets it enforce
+  **repeated-failed-sign-in lockout** (`src/lib/auth/lockout.ts`: 5 failed
+  attempts for one email within 15 minutes locks it for 15 minutes,
+  tracked in the `login_attempts` table) *before* ever calling Supabase Auth,
+  and log every attempt server-side regardless of what the client does.
+- **Password reset**: `/admin/forgot-password` → Supabase's
+  `resetPasswordForEmail()` → emailed link → `/admin/reset-password` →
+  `updateUser({ password })`. The forgot-password page always shows the same
+  confirmation regardless of whether the email exists, so it can't be used
+  to enumerate admin accounts.
+- **Optional TOTP multi-factor authentication**, built on Supabase Auth's
+  native MFA support (no extra dependency) — enroll/verify/remove from
+  `/admin/security` (`src/components/admin/MfaEnrollment.tsx`). Once
+  enabled, `requireAdmin()` (`src/lib/auth/admin.ts`) and the middleware
+  both check the session's authenticator assurance level and reject/redirect
+  an aal1-only session (password verified, second factor not yet completed)
+  from every protected page and API route — a stolen session cookie alone
+  isn't enough once MFA is on.
+- **Session expiration**: Supabase's own JWT expiry/refresh handles the
+  absolute session lifetime; on top of that, the middleware tracks an
+  `admin_last_seen` cookie and signs out + redirects to
+  `/admin/login?expired=1` after `ADMIN_SESSION_IDLE_MINUTES` (default 60)
+  of inactivity on `/admin/*`.
+- **Role-based access control**: `profiles.role` is `'admin'` (full access)
+  or `'staff'` (bookings/calendar/payments, no settings/content/team/audit
+  log). `requireAdmin()` accepts either; `requireRole('admin')` gates the
+  sensitive routes. Roles are managed from the "Team & roles" panel on
+  `/admin/settings` (`src/app/api/admin/team/[id]/route.ts`) — an admin
+  can't demote themselves if they're the last remaining admin.
+- **Logout**: the sign-out button in `AdminNav` calls `supabase.auth.signOut()`.
+
+**Dashboard** (`/admin/dashboard`) — new requests, requests awaiting review,
+awaiting deposit, confirmed, upcoming check-ins/check-outs (7 days),
+outstanding balances, expired payment links (including holds past
+`hold_expires_at` not yet swept by the cron job), cancelled bookings, recent
+payments, a 30-day occupancy percentage, confirmed/received revenue, and a
+14-day calendar strip. The old dashboard's filterable booking table moved to
+`/admin/bookings`.
+
+**Booking management** (`/admin/bookings`, `/admin/bookings/[id]`) — full
+detail view, accept/decline (with a reason)/request-info/propose-dates,
+resend booking emails, resend deposit/balance links, cancel a confirmed
+booking, record deposit/balance/refund payments, check in/out, plus this
+phase's additions: a **guest communication log** (`guest_communications`
+table — calls, WhatsApp, emails sent outside the automated flow), editable
+**guest contact details**, **private internal notes** (`bookings.admin_notes`,
+never guest-visible), **CSV export**, and a **printable/downloadable booking
+summary** (`/admin/bookings/[id]/print` — open in a new tab, then the
+browser's print dialog handles "Save as PDF").
+
+**Calendar management** (`/admin/calendar`) — day/week/month views (colour:
+green confirmed, gold held, grey blocked, white available), block/unblock
+dates with a reason, seasonal/date-specific nightly rates and per-range
+minimum-stay rules (`date_rate_overrides`, first-created-range-wins), a
+weekend-rate quick edit, viewing temporary holds, and **manually creating a
+booking** (phone/walk-in enquiries) that goes through the exact same
+pricing/availability/double-booking-constraint path as the public form —
+an admin-created booking can never silently overlap an existing one either.
+
+**Content management** (`/admin/content`) — a small CMS: home-page text,
+property description, amenities, policies, FAQs, contact details, gallery
+images, promotional banner, social links, about-page copy, and testimonials
+are all rows in `content_sections` (migration `0008`, key/value JSONB),
+editable live and rendered immediately on the public site (`src/lib/content/store.ts:getContentSection()`
+falls back to the static defaults in `src/lib/content/*.ts` for any section
+an admin hasn't touched yet, so nothing needs seeding). Because public pages
+now read live DB content, `src/app/(site)/layout.tsx` sets
+`export const dynamic = 'force-dynamic'` — otherwise Next would freeze them
+into build-time static HTML and an admin's content edit would never appear
+without a full redeploy. Prices, fees, and check-in/out times are
+deliberately **not** duplicated here — they're real operational settings
+with one source of truth (`/admin/settings`), linked from the Content page.
+
+**Settings** (`/admin/settings`, admin role only) — every field listed under
+"Business rules" above, plus the team/role panel. **Audit log**
+(`/admin/audit-log`, admin role only) — `admin_audit_log` (migration `0007`)
+is an append-only table logging administrator, action, timestamp, affected
+record, and a before/after diff for every settings change, content edit,
+calendar rate/block change, manual booking, guest-info edit, and role
+change. It's deliberately a separate, general-purpose trail from the two
+domain-specific ones that already existed: `booking_status_history` (every
+booking status transition, with actor + note) and `payment_events`
+(every payment occurrence) — each stays scoped to its own domain rather
+than duplicating into one giant table.
 
 ## Payment engine
 
@@ -285,12 +396,12 @@ supabase/migrations/     SQL schema + RLS policies, in order (0001, 0002, ...)
 
 Every piece of editable marketing copy — property description, amenities,
 gallery captions, FAQ answers, policies, testimonials, about-page story,
-contact copy — lives in `src/lib/content/` as typed, named exports (not
-scattered through page JSX). This is deliberate: a future "edit site
-content" admin screen can be built as a thin layer that reads/writes a
-Supabase table shaped like these same exports (e.g. `site_content` keyed by
-field name) without any page component needing to change. That admin screen
-itself isn't built yet — see "Assumptions & placeholders" below.
+contact copy — has a static default in `src/lib/content/*.ts` (typed, named
+exports) and a live, admin-editable override in the `content_sections` table
+(`/admin/content` — see "Admin portal" above). Pages call
+`getContentSection(key, staticDefault)`, so a fresh database renders
+identically to before this table existed, and every edit made in the admin
+UI is what guests actually see, immediately.
 
 ### API routes
 
@@ -367,11 +478,13 @@ simulated payments). To go live:
 - Guest identity on the public status page (`/booking/[id]`) is the booking UUID
   or reference acting as a bearer token (the same model as the emailed link) —
   there's no separate guest login.
-- Currency is fixed to ZAR (`bookingRules.currency`). Weekend/seasonal rates,
-  cleaning/service fees, discounts and the security deposit are all real,
-  configured line items (`pricingConfig` in `src/lib/config.ts`) — every one
-  defaults to "off" (0, or `weekendNightlyRateZar: null`, or an empty
-  `seasonalRates` array) until set.
+- Currency defaults to ZAR but is admin-configurable (`settings.currency`,
+  `/admin/settings`) — every price/fee is formatted with whatever's
+  configured, not hardcoded ZAR. Weekend/seasonal rates, cleaning/service
+  fees, and the security deposit are all real, live-configurable line items;
+  the "Discount" line item remains a static `pricingConfig.discountZar`
+  default in `src/lib/config.ts` (no settings field for it) — every fee
+  defaults to "off" (0, or a null weekend rate, or no rate overrides) until set.
 - "Booking purpose" is optional on the form (`leisure`/`business`/`other`) —
   intentionally not required, since it isn't needed to process a booking and
   the brief was explicit about not collecting unnecessary personal data.

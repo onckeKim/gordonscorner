@@ -5,8 +5,17 @@ import { FilterableGallery } from '@/components/FilterableGallery';
 import { AccommodationAvailability } from '@/components/AccommodationAvailability';
 import { ButtonLink } from '@/components/ui/Button';
 import { bookingRules, propertyDetails, siteConfig, pricingConfig } from '@/lib/config';
-import { propertyIntro, houseFeatures, accessibilityInfo, parkingInfo, safetyInfo, locationSummary } from '@/lib/content/property';
-import { galleryPhotos } from '@/lib/content/gallery';
+import { getContentSection } from '@/lib/content/store';
+import {
+  siteContentDefaults,
+  propertyContentDefaults,
+  galleryContentDefaults,
+  amenitiesContentDefaults,
+  type SiteContentSection,
+  type PropertyContentSection,
+  type AmenityEntry,
+} from '@/lib/content/sections';
+import type { GalleryPhoto } from '@/lib/content/gallery';
 
 export const metadata: Metadata = { title: `Accommodation — ${siteConfig.propertyName}` };
 
@@ -21,7 +30,14 @@ function formatZar(amount: number): string {
   return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount);
 }
 
-export default function AccommodationPage() {
+export default async function AccommodationPage() {
+  const [site, property, galleryPhotos, amenities] = await Promise.all([
+    getContentSection<SiteContentSection>('site', siteContentDefaults),
+    getContentSection<PropertyContentSection>('property', propertyContentDefaults),
+    getContentSection<GalleryPhoto[]>('gallery', galleryContentDefaults),
+    getContentSection<AmenityEntry[]>('amenities', amenitiesContentDefaults),
+  ]);
+
   return (
     <div>
       <section className="border-b border-corner-stone">
@@ -30,7 +46,7 @@ export default function AccommodationPage() {
           <h1 className="mt-3 font-display text-4xl font-semibold text-corner-charcoal sm:text-5xl">
             Gordon&rsquo;s Corner
           </h1>
-          <p className="mt-6 text-lg leading-relaxed text-corner-muted">{propertyIntro.full}</p>
+          <p className="mt-6 text-lg leading-relaxed text-corner-muted">{property.introFull}</p>
 
           <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-4">
             {CAPACITY_STATS.map((stat) => (
@@ -56,13 +72,13 @@ export default function AccommodationPage() {
           <p className="eyebrow">Amenities</p>
           <h2 className="section-heading mt-3">What&rsquo;s included</h2>
           <div className="mt-8">
-            <AmenitiesGrid />
+            <AmenitiesGrid amenities={amenities} />
           </div>
 
           <p className="eyebrow mt-16">House features</p>
           <h2 className="section-heading mt-3">A closer look at the space</h2>
           <ul className="mt-8 grid gap-3 sm:grid-cols-2">
-            {houseFeatures.map((feature) => (
+            {property.houseFeatures.map((feature) => (
               <li key={feature} className="flex items-start gap-2 text-sm text-corner-charcoal">
                 <span aria-hidden className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-corner-gold" />
                 {feature}
@@ -87,18 +103,18 @@ export default function AccommodationPage() {
           <div className="card">
             <Accessibility aria-hidden className="h-5 w-5 text-corner-gold" strokeWidth={1.5} />
             <h3 className="mt-3 font-display text-lg font-semibold text-corner-charcoal">Accessibility</h3>
-            <p className="mt-2 text-sm text-corner-muted">{accessibilityInfo}</p>
+            <p className="mt-2 text-sm text-corner-muted">{property.accessibilityInfo}</p>
           </div>
           <div className="card">
             <Car aria-hidden className="h-5 w-5 text-corner-gold" strokeWidth={1.5} />
             <h3 className="mt-3 font-display text-lg font-semibold text-corner-charcoal">Parking</h3>
-            <p className="mt-2 text-sm text-corner-muted">{parkingInfo}</p>
+            <p className="mt-2 text-sm text-corner-muted">{property.parkingInfo}</p>
           </div>
           <div className="card">
             <ShieldCheck aria-hidden className="h-5 w-5 text-corner-gold" strokeWidth={1.5} />
             <h3 className="mt-3 font-display text-lg font-semibold text-corner-charcoal">Safety</h3>
             <ul className="mt-2 space-y-1 text-sm text-corner-muted">
-              {safetyInfo.map((item) => (
+              {property.safetyInfo.map((item) => (
                 <li key={item}>{item}</li>
               ))}
             </ul>
@@ -110,16 +126,16 @@ export default function AccommodationPage() {
         <div className="mx-auto grid max-w-6xl gap-10 px-6 py-16 lg:grid-cols-2 lg:items-center">
           <div>
             <p className="eyebrow">Location</p>
-            <h2 className="section-heading mt-3">{siteConfig.address}</h2>
-            <p className="mt-4 max-w-md text-corner-muted">{locationSummary}</p>
+            <h2 className="section-heading mt-3">{site.address}</h2>
+            <p className="mt-4 max-w-md text-corner-muted">{property.locationSummary}</p>
             <p className="mt-4 flex items-center gap-2 text-sm text-corner-charcoal">
               <MapPin aria-hidden className="h-4 w-4 text-corner-gold" />
-              {siteConfig.addressLine1}, {siteConfig.addressLine2}
+              {site.addressLine1}, {site.addressLine2}
             </p>
           </div>
           <div
             role="img"
-            aria-label={`Map placeholder showing ${siteConfig.address}`}
+            aria-label={`Map placeholder showing ${site.address}`}
             className="aspect-[4/3] rounded-xl2 bg-gradient-to-br from-corner-forest/15 via-corner-stone to-corner-gold/15"
           />
         </div>

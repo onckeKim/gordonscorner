@@ -10,24 +10,49 @@ import { Newsletter } from '@/components/Newsletter';
 import { Alert } from '@/components/ui/Alert';
 import { ButtonLink } from '@/components/ui/Button';
 import { siteConfig, bookingRules, propertyDetails, pricingConfig } from '@/lib/config';
-import { propertyIntro, houseFeatures, locationSummary } from '@/lib/content/property';
-import { galleryPhotos } from '@/lib/content/gallery';
-import { testimonials } from '@/lib/content/testimonials';
+import { getContentSection } from '@/lib/content/store';
+import {
+  siteContentDefaults,
+  propertyContentDefaults,
+  galleryContentDefaults,
+  testimonialsContentDefaults,
+  amenitiesContentDefaults,
+  faqContentDefaults,
+  type SiteContentSection,
+  type PropertyContentSection,
+  type AmenityEntry,
+} from '@/lib/content/sections';
+import type { GalleryPhoto } from '@/lib/content/gallery';
+import type { TestimonialEntry } from '@/lib/content/testimonials';
+import type { AccordionItem } from '@/components/ui/Accordion';
+import { homeFaqIds, type FaqGroup } from '@/lib/content/faq';
 
 function formatZar(amount: number): string {
   return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount);
 }
 
-const COLLAGE_PHOTOS = galleryPhotos.slice(0, 5);
-const GALLERY_PREVIEW_PHOTOS = galleryPhotos.slice(5, 10);
+export default async function HomePage() {
+  const [site, property, galleryPhotos, testimonials, faqGroups, amenities] = await Promise.all([
+    getContentSection<SiteContentSection>('site', siteContentDefaults),
+    getContentSection<PropertyContentSection>('property', propertyContentDefaults),
+    getContentSection<GalleryPhoto[]>('gallery', galleryContentDefaults),
+    getContentSection<TestimonialEntry[]>('testimonials', testimonialsContentDefaults),
+    getContentSection<FaqGroup[]>('faq', faqContentDefaults),
+    getContentSection<AmenityEntry[]>('amenities', amenitiesContentDefaults),
+  ]);
+  const homeFaqItems: AccordionItem[] = faqGroups
+    .flatMap((g) => g.items)
+    .filter((item) => homeFaqIds.includes(item.id))
+    .map((item) => ({ id: item.id, title: item.question, content: item.answer }));
+  const COLLAGE_PHOTOS = galleryPhotos.slice(0, 5);
+  const GALLERY_PREVIEW_PHOTOS = galleryPhotos.slice(5, 10);
 
-export default function HomePage() {
   return (
     <div>
       <Hero
-        eyebrow={siteConfig.address}
-        title={siteConfig.tagline}
-        subtitle={siteConfig.description}
+        eyebrow={site.address}
+        title={site.tagline}
+        subtitle={site.description}
         primaryCta={{ href: '/book', label: 'Check Availability' }}
         secondaryCta={{ href: '/accommodation', label: 'Explore the stay' }}
         imageAlt="Gordon's Corner exterior in warm afternoon light"
@@ -43,7 +68,7 @@ export default function HomePage() {
             <div>
               <p className="eyebrow">Property overview</p>
               <h2 className="section-heading mt-3">A boutique retreat, entirely yours</h2>
-              <p className="mt-5 max-w-xl text-corner-muted">{propertyIntro.short}</p>
+              <p className="mt-5 max-w-xl text-corner-muted">{property.introShort}</p>
               <ul className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm text-corner-charcoal">
                 <li>Sleeps {propertyDetails.maxGuests}</li>
                 <li>{propertyDetails.bedrooms} bedrooms</li>
@@ -78,7 +103,7 @@ export default function HomePage() {
             <p className="eyebrow">What&rsquo;s included</p>
             <h2 className="section-heading mt-3">Everything you need, nothing you don&rsquo;t</h2>
             <div className="mt-8">
-              <AmenitiesGrid />
+              <AmenitiesGrid amenities={amenities} />
             </div>
           </div>
 
@@ -86,7 +111,7 @@ export default function HomePage() {
             <p className="eyebrow">Highlights</p>
             <h2 className="section-heading mt-3">Accommodation highlights</h2>
             <ul className="mt-8 grid gap-3 sm:grid-cols-2">
-              {houseFeatures.map((feature) => (
+              {property.houseFeatures.map((feature) => (
                 <li key={feature} className="flex items-start gap-2 text-sm text-corner-charcoal">
                   <span aria-hidden className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-corner-gold" />
                   {feature}
@@ -128,11 +153,11 @@ export default function HomePage() {
         <div className="mx-auto grid max-w-6xl gap-10 px-6 py-20 lg:grid-cols-2 lg:items-center">
           <div>
             <p className="eyebrow">Location</p>
-            <h2 className="section-heading mt-3">{siteConfig.address}</h2>
-            <p className="mt-4 max-w-md text-corner-muted">{locationSummary}</p>
+            <h2 className="section-heading mt-3">{site.address}</h2>
+            <p className="mt-4 max-w-md text-corner-muted">{property.locationSummary}</p>
             <p className="mt-4 flex items-center gap-2 text-sm text-corner-charcoal">
               <MapPin aria-hidden className="h-4 w-4 text-corner-gold" />
-              {siteConfig.addressLine1}, {siteConfig.addressLine2}
+              {site.addressLine1}, {site.addressLine2}
             </p>
             <Link href="/accommodation#location" className="mt-4 inline-block text-sm font-medium text-corner-gold underline hover:no-underline">
               More on the area →
@@ -140,7 +165,7 @@ export default function HomePage() {
           </div>
           <div
             role="img"
-            aria-label={`Map placeholder showing ${siteConfig.address}`}
+            aria-label={`Map placeholder showing ${site.address}`}
             className="aspect-[4/3] rounded-xl2 bg-gradient-to-br from-corner-forest/15 via-corner-stone to-corner-gold/15"
           />
         </div>
@@ -151,7 +176,7 @@ export default function HomePage() {
           <p className="eyebrow text-center">FAQ</p>
           <h2 className="section-heading mt-3 text-center">Frequently asked questions</h2>
           <div className="mt-10">
-            <FAQ />
+            <FAQ items={homeFaqItems} />
           </div>
           <p className="mt-6 text-center text-sm">
             <Link href="/faq" className="font-medium text-corner-gold underline hover:no-underline">

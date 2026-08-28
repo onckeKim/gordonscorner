@@ -94,10 +94,12 @@ export default async function BookingStatusPage({
           cleaningFeeAmount={booking.cleaning_fee_amount}
           serviceFeeAmount={booking.service_fee_amount}
           discountAmount={booking.discount_amount}
+          taxAmount={booking.tax_amount}
           securityDepositAmount={booking.security_deposit_amount}
           totalAmount={booking.total_amount}
           depositAmount={booking.deposit_amount}
           balanceAmount={booking.balance_amount}
+          currency={booking.currency}
           depositPaid={Boolean(booking.deposit_paid_at)}
           balancePaid={Boolean(booking.balance_paid_at)}
         />

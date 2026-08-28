@@ -1,11 +1,15 @@
 import type { Metadata } from 'next';
 import { FilterableGallery } from '@/components/FilterableGallery';
-import { galleryPhotos } from '@/lib/content/gallery';
+import { getContentSection } from '@/lib/content/store';
+import { galleryContentDefaults } from '@/lib/content/sections';
+import type { GalleryPhoto } from '@/lib/content/gallery';
 import { siteConfig } from '@/lib/config';
 
 export const metadata: Metadata = { title: `Gallery — ${siteConfig.propertyName}` };
 
-export default function GalleryPage() {
+export default async function GalleryPage() {
+  const galleryPhotos = await getContentSection<GalleryPhoto[]>('gallery', galleryContentDefaults);
+
   return (
     <div className="mx-auto max-w-6xl px-6 py-16">
       <p className="eyebrow">Gallery</p>

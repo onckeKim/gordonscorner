@@ -6,6 +6,9 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { BookingActions } from '@/components/admin/BookingActions';
 import { PriceBreakdown } from '@/components/PriceBreakdown';
 import { PaymentsPanel } from '@/components/admin/PaymentsPanel';
+import { GuestInfoEditor } from '@/components/admin/GuestInfoEditor';
+import { CommunicationLog } from '@/components/admin/CommunicationLog';
+import { InternalNotes } from '@/components/admin/InternalNotes';
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString('en-ZA', {
@@ -28,7 +31,7 @@ export default async function AdminBookingDetailPage({
 
   const supabase = await createServerSupabaseClient();
 
-  const [{ data: booking }, { data: history }, { data: payments }] = await Promise.all([
+  const [{ data: booking }, { data: history }, { data: payments }, { data: communications }] = await Promise.all([
     supabase.from('bookings').select('*').eq('id', id).single(),
     supabase
       .from('booking_status_history')
@@ -36,6 +39,11 @@ export default async function AdminBookingDetailPage({
       .eq('booking_id', id)
       .order('created_at', { ascending: false }),
     supabase.from('payments').select('*').eq('booking_id', id).order('created_at', { ascending: false }),
+    supabase
+      .from('guest_communications')
+      .select('*')
+      .eq('booking_id', id)
+      .order('created_at', { ascending: false }),
   ]);
 
   if (!booking) {
@@ -53,7 +61,15 @@ export default async function AdminBookingDetailPage({
                 href={`/api/admin/bookings/export?bookingId=${id}`}
                 className="text-xs text-corner-gold underline hover:no-underline"
               >
-                Download booking record
+                Download CSV
+              </a>
+              <a
+                href={`/admin/bookings/${id}/print`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-corner-gold underline hover:no-underline"
+              >
+                Print / download summary
               </a>
               <StatusBadge status={booking.status} />
             </div>
@@ -63,6 +79,9 @@ export default async function AdminBookingDetailPage({
             {booking.guest_phone ? ` · ${booking.guest_phone}` : ''}
             {booking.guest_country ? ` · ${booking.guest_country}` : ''}
           </p>
+          <div className="mt-1">
+            <GuestInfoEditor booking={booking} />
+          </div>
           {booking.reference && (
             <p className="mt-2 font-display text-lg">{booking.reference}</p>
           )}
@@ -114,10 +133,12 @@ export default async function AdminBookingDetailPage({
             cleaningFeeAmount={booking.cleaning_fee_amount}
             serviceFeeAmount={booking.service_fee_amount}
             discountAmount={booking.discount_amount}
+            taxAmount={booking.tax_amount}
             securityDepositAmount={booking.security_deposit_amount}
             totalAmount={booking.total_amount}
             depositAmount={booking.deposit_amount}
             balanceAmount={booking.balance_amount}
+            currency={booking.currency}
             depositPaid={Boolean(booking.deposit_paid_at)}
             balancePaid={Boolean(booking.balance_paid_at)}
           />
@@ -131,6 +152,10 @@ export default async function AdminBookingDetailPage({
         </div>
 
         <PaymentsPanel bookingId={id} payments={payments ?? []} />
+
+        <InternalNotes bookingId={id} notes={booking.admin_notes} />
+
+        <CommunicationLog bookingId={id} communications={communications ?? []} />
 
         <div className="card">
           <h2 className="font-display text-lg font-semibold">History</h2>

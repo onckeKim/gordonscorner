@@ -2,32 +2,38 @@ import type { Metadata } from 'next';
 import { Phone, Mail, MessageCircle, MapPin } from 'lucide-react';
 import { EnquiryForm } from '@/components/EnquiryForm';
 import { siteConfig } from '@/lib/config';
-import { checkInSupportInfo, contactIntro } from '@/lib/content/contact';
+import { getContentSection } from '@/lib/content/store';
+import {
+  siteContentDefaults,
+  contactContentDefaults,
+  socialContentDefaults,
+  type SiteContentSection,
+  type ContactContentSection,
+  type SocialContentSection,
+} from '@/lib/content/sections';
 
 export const metadata: Metadata = { title: `Contact — ${siteConfig.propertyName}` };
 
-const CONTACT_METHODS = [
-  {
-    icon: Phone,
-    label: 'Phone',
-    value: siteConfig.contactPhone,
-    href: `tel:${siteConfig.contactPhone}`,
-  },
-  {
-    icon: Mail,
-    label: 'Email',
-    value: siteConfig.contactEmail,
-    href: `mailto:${siteConfig.contactEmail}`,
-  },
-  {
-    icon: MessageCircle,
-    label: 'WhatsApp',
-    value: 'Message us',
-    href: `https://wa.me/${siteConfig.whatsappNumber}`,
-  },
-];
+export default async function ContactPage() {
+  const [site, contact, social] = await Promise.all([
+    getContentSection<SiteContentSection>('site', siteContentDefaults),
+    getContentSection<ContactContentSection>('contact', contactContentDefaults),
+    getContentSection<SocialContentSection>('social', socialContentDefaults),
+  ]);
 
-export default function ContactPage() {
+  const CONTACT_METHODS = [
+    { icon: Phone, label: 'Phone', value: site.contactPhone, href: `tel:${site.contactPhone}` },
+    { icon: Mail, label: 'Email', value: site.contactEmail, href: `mailto:${site.contactEmail}` },
+    { icon: MessageCircle, label: 'WhatsApp', value: 'Message us', href: `https://wa.me/${site.whatsappNumber}` },
+  ];
+
+  const socialLinks = [
+    { label: 'Instagram', href: social.instagram },
+    { label: 'Facebook', href: social.facebook },
+    { label: 'WhatsApp', href: social.whatsapp },
+    { label: 'TikTok', href: social.tiktok },
+  ].filter((s) => s.href);
+
   return (
     <div>
       <section className="border-b border-corner-stone">
@@ -36,7 +42,7 @@ export default function ContactPage() {
           <h1 className="mt-3 font-display text-4xl font-semibold text-corner-charcoal sm:text-5xl">
             Get in touch
           </h1>
-          <p className="mx-auto mt-4 max-w-md text-corner-muted">{contactIntro}</p>
+          <p className="mx-auto mt-4 max-w-md text-corner-muted">{contact.intro}</p>
         </div>
       </section>
 
@@ -59,27 +65,37 @@ export default function ContactPage() {
               ))}
             </div>
 
+            {socialLinks.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-3 text-sm">
+                {socialLinks.map((s) => (
+                  <a key={s.label} href={s.href} target="_blank" rel="noreferrer" className="text-corner-gold underline hover:no-underline">
+                    {s.label}
+                  </a>
+                ))}
+              </div>
+            )}
+
             <div className="card mt-6">
               <MapPin aria-hidden className="h-5 w-5 text-corner-gold" strokeWidth={1.5} />
               <p className="mt-2 font-display text-lg font-semibold text-corner-charcoal">Address</p>
               <p className="mt-1 text-sm text-corner-muted">
-                {siteConfig.addressLine1}
+                {site.addressLine1}
                 <br />
-                {siteConfig.addressLine2}
+                {site.addressLine2}
                 <br />
-                {siteConfig.addressCountry}
+                {site.addressCountry}
               </p>
             </div>
 
             <div
               role="img"
-              aria-label={`Map placeholder showing ${siteConfig.address}`}
+              aria-label={`Map placeholder showing ${site.address}`}
               className="mt-6 aspect-[16/9] rounded-xl2 bg-gradient-to-br from-corner-forest/15 via-corner-stone to-corner-gold/15"
             />
 
             <div className="card mt-6">
               <p className="font-display text-lg font-semibold text-corner-charcoal">Check-in support</p>
-              <p className="mt-2 text-sm text-corner-muted">{checkInSupportInfo}</p>
+              <p className="mt-2 text-sm text-corner-muted">{contact.checkInSupportInfo}</p>
               <p className="mt-3 text-xs text-corner-muted">
                 Emergency contact details are shared directly with confirmed guests as part of
                 their booking confirmation and check-in instructions.

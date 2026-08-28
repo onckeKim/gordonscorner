@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { requireAdmin } from '@/lib/auth/admin';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
+import { writeAuditLog } from '@/lib/audit';
 import { handleApiError } from '@/lib/api-response';
 
 const bodySchema = z.object({
@@ -27,6 +28,14 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) throw error;
+
+    await writeAuditLog(admin, {
+      action: 'blocked_date.create',
+      recordType: 'blocked_date',
+      recordId: data.id,
+      changes: { start_date: startDate, end_date: endDate, reason: reason ?? null },
+    });
+
     return NextResponse.json({ blockedDate: data }, { status: 201 });
   } catch (err) {
     return handleApiError(err);

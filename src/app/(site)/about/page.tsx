@@ -1,17 +1,22 @@
 import type { Metadata } from 'next';
 import { ButtonLink } from '@/components/ui/Button';
 import { siteConfig } from '@/lib/config';
+import { getContentSection } from '@/lib/content/store';
 import {
-  aboutStory,
-  propertyPhilosophy,
-  whatGuestsCanExpect,
-  hostIntro,
-  localAreaHighlights,
-} from '@/lib/content/about';
+  aboutContentDefaults,
+  propertyContentDefaults,
+  type AboutContentSection,
+  type PropertyContentSection,
+} from '@/lib/content/sections';
 
 export const metadata: Metadata = { title: `About — ${siteConfig.propertyName}` };
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const [about, property] = await Promise.all([
+    getContentSection<AboutContentSection>('about', aboutContentDefaults),
+    getContentSection<PropertyContentSection>('property', propertyContentDefaults),
+  ]);
+
   return (
     <div>
       <section className="border-b border-corner-stone">
@@ -20,7 +25,7 @@ export default function AboutPage() {
           <h1 className="mt-3 font-display text-4xl font-semibold text-corner-charcoal sm:text-5xl">
             About {siteConfig.propertyName}
           </h1>
-          <p className="mt-6 text-lg leading-relaxed text-corner-muted">{aboutStory}</p>
+          <p className="mt-6 text-lg leading-relaxed text-corner-muted">{about.story}</p>
         </div>
       </section>
 
@@ -34,7 +39,7 @@ export default function AboutPage() {
           <div>
             <p className="eyebrow">Our philosophy</p>
             <h2 className="section-heading mt-3">Less, but better</h2>
-            <p className="mt-4 text-corner-muted">{propertyPhilosophy}</p>
+            <p className="mt-4 text-corner-muted">{about.philosophy}</p>
           </div>
         </div>
       </section>
@@ -44,7 +49,7 @@ export default function AboutPage() {
           <p className="eyebrow">What to expect</p>
           <h2 className="section-heading mt-3">Every stay, without compromise</h2>
           <ul className="mt-8 space-y-4">
-            {whatGuestsCanExpect.map((item) => (
+            {about.whatGuestsCanExpect.map((item) => (
               <li key={item} className="flex items-start gap-3 text-corner-charcoal">
                 <span aria-hidden className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-corner-gold" />
                 {item}
@@ -60,12 +65,12 @@ export default function AboutPage() {
           <div className="mt-6 flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
             <span
               role="img"
-              aria-label={`Portrait placeholder for ${hostIntro.name}`}
+              aria-label={`Portrait placeholder for ${about.hostName}`}
               className="h-20 w-20 shrink-0 rounded-full bg-gradient-to-br from-corner-forest/20 via-corner-stone to-corner-gold/20"
             />
             <div>
-              <p className="font-display text-xl font-semibold text-corner-charcoal">{hostIntro.name}</p>
-              <p className="mt-2 text-sm text-corner-muted">{hostIntro.bio}</p>
+              <p className="font-display text-xl font-semibold text-corner-charcoal">{about.hostName}</p>
+              <p className="mt-2 text-sm text-corner-muted">{about.hostBio}</p>
             </div>
           </div>
         </div>
@@ -76,7 +81,7 @@ export default function AboutPage() {
           <p className="eyebrow">The area</p>
           <h2 className="section-heading mt-3">Local highlights</h2>
           <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {localAreaHighlights.map((place) => (
+            {property.localHighlights.map((place) => (
               <div key={place.name} className="card">
                 <h3 className="font-display text-lg font-semibold text-corner-charcoal">{place.name}</h3>
                 <p className="mt-2 text-sm text-corner-muted">{place.description}</p>

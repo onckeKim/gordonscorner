@@ -1,12 +1,20 @@
 import type { Metadata } from 'next';
 import { Accordion } from '@/components/ui/Accordion';
 import { PolicyAccordion } from '@/components/PolicyAccordion';
-import { faqGroups } from '@/lib/content/faq';
+import { getContentSection } from '@/lib/content/store';
+import { faqContentDefaults, policiesContentDefaults } from '@/lib/content/sections';
+import type { FaqGroup } from '@/lib/content/faq';
+import type { PolicyEntry } from '@/lib/content/policies';
 import { siteConfig } from '@/lib/config';
 
 export const metadata: Metadata = { title: `FAQ — ${siteConfig.propertyName}` };
 
-export default function FaqPage() {
+export default async function FaqPage() {
+  const [faqGroups, policies] = await Promise.all([
+    getContentSection<FaqGroup[]>('faq', faqContentDefaults),
+    getContentSection<PolicyEntry[]>('policies', policiesContentDefaults),
+  ]);
+
   return (
     <div className="mx-auto max-w-3xl px-6 py-16">
       <p className="eyebrow text-center">FAQ</p>
@@ -39,7 +47,7 @@ export default function FaqPage() {
           The full cancellation and house-rules policy referenced when booking.
         </p>
         <div className="mt-4">
-          <PolicyAccordion />
+          <PolicyAccordion policies={policies} />
         </div>
       </div>
     </div>

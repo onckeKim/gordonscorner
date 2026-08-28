@@ -1,8 +1,8 @@
 import 'server-only';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
-import { bookingRules } from '@/lib/config';
 import { isWithinLeadTime, leadTimeDescription, todayIsoInPropertyTimeZone } from '@/lib/timezone';
 import { daysBetweenIso, addDaysIso } from '@/lib/date-utils';
+import { getSettings, getDateRateOverrides } from '@/lib/settings';
 
 export interface DateRange {
   checkIn: string; // YYYY-MM-DD
@@ -23,7 +23,8 @@ export interface AvailabilityCheckResult {
 
 /**
  * Validates a requested date range against the business rules (min/max
- * nights, lead time, max advance window) and against existing
+ * nights, lead time, max advance window — all live from src/lib/settings.ts,
+ * including any date-specific minimum-stay override) and against existing
  * holds/bookings/blocked dates. This is the single source of truth for
  * "can these dates be booked" — used both by the public availability
  * endpoint and the booking-create route (server-side, so it can't be
@@ -40,39 +41,53 @@ export async function checkAvailability(range: DateRange): Promise<AvailabilityC
     return { available: false, reason: 'Invalid dates.' };
   }
 
+  const [settings, rateOverrides] = await Promise.all([getSettings(), getDateRateOverrides()]);
   const nights = daysBetweenIso(range.checkIn, range.checkOut);
 
-  if (nights < bookingRules.minNights) {
+  const minStayOverride = rateOverrides.find(
+    (r) => r.min_nights != null && range.checkIn >= r.start_date && range.checkIn < r.end_date,
+  );
+  const minNights = Math.max(settings.min_nights, minStayOverride?.min_nights ?? 0);
+
+  if (nights < minNights) {
     return {
       available: false,
-      reason: `Minimum stay is ${bookingRules.minNights} nights.`,
+      reason: minStayOverride
+        ? `Minimum stay for these dates is ${minNights} nights (${minStayOverride.label ?? 'seasonal minimum'}).`
+        : `Minimum stay is ${minNights} nights.`,
     };
   }
 
-  if (nights > bookingRules.maxNights) {
+  if (nights > settings.max_nights) {
     return {
       available: false,
-      reason: `Maximum stay is ${bookingRules.maxNights} nights. Please contact us for longer stays.`,
+      reason: `Maximum stay is ${settings.max_nights} nights. Please contact us for longer stays.`,
     };
   }
 
-  const today = todayIsoInPropertyTimeZone();
+  const today = todayIsoInPropertyTimeZone(settings.time_zone);
   if (range.checkIn < today) {
     return { available: false, reason: 'Check-in date is in the past.' };
   }
 
-  if (!isWithinLeadTime(range.checkIn)) {
+  const leadTimeRules = {
+    leadTimeHours: settings.lead_time_hours,
+    sameDayBookingEnabled: settings.same_day_booking_enabled,
+    checkInTime: settings.check_in_time,
+    timeZone: settings.time_zone,
+  };
+  if (!isWithinLeadTime(range.checkIn, leadTimeRules)) {
     return {
       available: false,
-      reason: `Bookings must be made ${leadTimeDescription()}.`,
+      reason: `Bookings must be made ${leadTimeDescription(leadTimeRules)}.`,
     };
   }
 
-  const maxAdvance = addDaysIso(today, bookingRules.maxAdvanceBookingDays);
+  const maxAdvance = addDaysIso(today, settings.max_advance_booking_days);
   if (range.checkIn > maxAdvance) {
     return {
       available: false,
-      reason: `Bookings can only be made up to ${bookingRules.maxAdvanceBookingDays} days in advance.`,
+      reason: `Bookings can only be made up to ${settings.max_advance_booking_days} days in advance.`,
     };
   }
 

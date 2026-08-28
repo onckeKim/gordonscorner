@@ -1,7 +1,7 @@
 import 'server-only';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
-import { bookingRules, propertyDetails } from '@/lib/config';
 import { calculateStayPricing } from '@/lib/pricing';
+import { getSettings, getEffectivePricingInputs } from '@/lib/settings';
 import { checkAvailability } from '@/lib/booking/availability';
 import { generateBookingReference, generatePaymentToken } from '@/lib/booking/reference';
 import { createPaymentLink } from '@/lib/payments';
@@ -18,7 +18,8 @@ import {
   sendRefundEmail,
   sendPaymentLinkResentEmail,
 } from '@/lib/email';
-import type { Booking, BookingStatus, Payment, StatusActor } from '@/types/database';
+import { writeAuditLog } from '@/lib/audit';
+import type { Booking, BookingStatus, GuestCommunication, GuestCommunicationChannel, Payment, StatusActor } from '@/types/database';
 
 export class WorkflowError extends Error {}
 
@@ -93,12 +94,14 @@ export async function createBookingRequest(input: {
     throw new WorkflowError('Please confirm you accept the cancellation policy.');
   }
 
+  const settings = await getSettings();
+
   const guestsCount = input.adultsCount + input.childrenCount;
   if (guestsCount < 1) {
     throw new WorkflowError('Please add at least one guest.');
   }
-  if (guestsCount > propertyDetails.maxGuests) {
-    throw new WorkflowError(`This property sleeps a maximum of ${propertyDetails.maxGuests} guests.`);
+  if (guestsCount > settings.guest_capacity) {
+    throw new WorkflowError(`This property sleeps a maximum of ${settings.guest_capacity} guests.`);
   }
 
   const availability = await checkAvailability({
@@ -110,7 +113,8 @@ export async function createBookingRequest(input: {
     throw new WorkflowError(availability.reason ?? 'These dates are not available.');
   }
 
-  const pricing = calculateStayPricing(input.checkIn, input.checkOut);
+  const pricingInputs = await getEffectivePricingInputs();
+  const pricing = calculateStayPricing(input.checkIn, input.checkOut, pricingInputs);
   const now = new Date().toISOString();
 
   const db = createAdminSupabaseClient();
@@ -136,6 +140,7 @@ export async function createBookingRequest(input: {
       cleaning_fee_amount: pricing.cleaningFeeAmount,
       service_fee_amount: pricing.serviceFeeAmount,
       discount_amount: pricing.discountAmount,
+      tax_amount: pricing.taxAmount,
       security_deposit_amount: pricing.securityDepositAmount,
       nightly_rate_breakdown: pricing.nightlyBreakdown,
       total_amount: pricing.totalAccommodationPrice,
@@ -198,9 +203,10 @@ export async function acceptBooking(bookingId: string, adminId: string): Promise
     );
   }
 
+  const settings = await getSettings();
   const paymentToken = generatePaymentToken();
   const holdExpiresAt = new Date(
-    Date.now() + bookingRules.holdExpiryHours * 60 * 60 * 1000,
+    Date.now() + settings.hold_period_hours * 60 * 60 * 1000,
   ).toISOString();
 
   const { data: updated, error } = await db
@@ -348,7 +354,8 @@ export async function guestAcceptsProposedDates(bookingId: string): Promise<Book
     throw new WorkflowError('No proposed dates on this booking.');
   }
 
-  const pricing = calculateStayPricing(booking.proposed_check_in, booking.proposed_check_out);
+  const pricingInputs = await getEffectivePricingInputs();
+  const pricing = calculateStayPricing(booking.proposed_check_in, booking.proposed_check_out, pricingInputs);
 
   const { data: updated, error } = await db
     .from('bookings')
@@ -362,6 +369,7 @@ export async function guestAcceptsProposedDates(bookingId: string): Promise<Book
       cleaning_fee_amount: pricing.cleaningFeeAmount,
       service_fee_amount: pricing.serviceFeeAmount,
       discount_amount: pricing.discountAmount,
+      tax_amount: pricing.taxAmount,
       security_deposit_amount: pricing.securityDepositAmount,
       nightly_rate_breakdown: pricing.nightlyBreakdown,
       total_amount: pricing.totalAccommodationPrice,
@@ -832,4 +840,255 @@ export async function expireStaleHolds(): Promise<number> {
   }
 
   return expired?.length ?? 0;
+}
+
+export interface ManualBookingInput {
+  firstName: string;
+  lastName: string;
+  guestEmail: string;
+  guestPhone?: string;
+  guestCountry?: string;
+  checkIn: string;
+  checkOut: string;
+  adultsCount: number;
+  childrenCount: number;
+  message?: string;
+  /**
+   * 'confirmed' — dates hard-blocked immediately, no deposit link sent
+   * (use "record manual payment" afterwards for any payment received
+   * outside the online flow). 'accepted_awaiting_deposit' — dates held and
+   * a normal deposit link is emailed, exactly like a guest-submitted
+   * request an admin just accepted.
+   */
+  initialStatus: 'confirmed' | 'accepted_awaiting_deposit';
+}
+
+/**
+ * Admin creates a booking directly (phone/email enquiry, walk-in, etc.)
+ * instead of the guest submitting the public form. Goes through the same
+ * pricing engine, availability check, and double-booking constraint as
+ * every other booking — an admin-created booking can never silently
+ * overlap an existing one either.
+ */
+export async function createManualBooking(actor: { id: string; email: string }, input: ManualBookingInput): Promise<Booking> {
+  const settings = await getSettings();
+  const guestsCount = input.adultsCount + input.childrenCount;
+  if (guestsCount < 1) {
+    throw new WorkflowError('Please add at least one guest.');
+  }
+  if (guestsCount > settings.guest_capacity) {
+    throw new WorkflowError(`This property sleeps a maximum of ${settings.guest_capacity} guests.`);
+  }
+
+  const availability = await checkAvailability({ checkIn: input.checkIn, checkOut: input.checkOut });
+  if (!availability.available) {
+    throw new WorkflowError(availability.reason ?? 'These dates are not available.');
+  }
+
+  const pricingInputs = await getEffectivePricingInputs();
+  const pricing = calculateStayPricing(input.checkIn, input.checkOut, pricingInputs);
+  const now = new Date().toISOString();
+  const db = createAdminSupabaseClient();
+
+  const basePatch = {
+    guest_name: `${input.firstName} ${input.lastName}`.trim(),
+    guest_first_name: input.firstName,
+    guest_last_name: input.lastName,
+    guest_email: input.guestEmail,
+    guest_phone: input.guestPhone ?? null,
+    guest_country: input.guestCountry ?? null,
+    check_in: input.checkIn,
+    check_out: input.checkOut,
+    guests_count: guestsCount,
+    adults_count: input.adultsCount,
+    children_count: input.childrenCount,
+    message: input.message ?? null,
+    accommodation_subtotal: pricing.accommodationSubtotal,
+    cleaning_fee_amount: pricing.cleaningFeeAmount,
+    service_fee_amount: pricing.serviceFeeAmount,
+    discount_amount: pricing.discountAmount,
+    tax_amount: pricing.taxAmount,
+    security_deposit_amount: pricing.securityDepositAmount,
+    nightly_rate_breakdown: pricing.nightlyBreakdown,
+    total_amount: pricing.totalAccommodationPrice,
+    deposit_amount: pricing.depositAmount,
+    balance_amount: pricing.balanceAmount,
+    currency: pricing.currency,
+    terms_agreed_at: now,
+    cancellation_policy_agreed_at: now,
+    communication_consent_at: now,
+  };
+
+  const statusPatch =
+    input.initialStatus === 'confirmed'
+      ? { status: 'confirmed' as const, reference: generateBookingReference() }
+      : {
+          status: 'accepted_awaiting_deposit' as const,
+          hold_expires_at: new Date(Date.now() + settings.hold_period_hours * 60 * 60 * 1000).toISOString(),
+          payment_token: generatePaymentToken(),
+        };
+
+  const { data, error } = await db
+    .from('bookings')
+    .insert({ ...basePatch, ...statusPatch })
+    .select('*')
+    .single();
+
+  if (error || !data) {
+    if (error?.code === EXCLUSION_VIOLATION) {
+      throw new DoubleBookingError('These dates were just taken by another booking. Please choose different dates.');
+    }
+    throw new WorkflowError(`Could not create booking: ${error?.message}`);
+  }
+
+  await recordHistory(db, data.id, null, data.status, 'admin', 'Created manually by admin');
+
+  await writeAuditLog(actor, {
+    action: 'booking.create_manual',
+    recordType: 'booking',
+    recordId: data.id,
+    changes: { checkIn: input.checkIn, checkOut: input.checkOut, initialStatus: input.initialStatus },
+  });
+
+  if (data.status === 'accepted_awaiting_deposit') {
+    const paymentLink = await createPaymentLink(data, 'deposit');
+    await sendDepositLinkEmail(data, paymentLink.url);
+  }
+
+  return data;
+}
+
+const EDITABLE_GUEST_FIELDS = [
+  'guest_first_name',
+  'guest_last_name',
+  'guest_email',
+  'guest_phone',
+  'guest_country',
+] as const;
+
+export interface GuestInfoUpdate {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  country?: string;
+}
+
+/** Admin edits guest contact details (e.g. a typo in the email, an updated phone number). */
+export async function updateGuestInfo(
+  bookingId: string,
+  actor: { id: string; email: string },
+  input: GuestInfoUpdate,
+): Promise<Booking> {
+  const db = createAdminSupabaseClient();
+  const before = await getBookingOrThrow(db, bookingId);
+
+  const patch: Partial<Booking> = {};
+  if (input.firstName !== undefined) patch.guest_first_name = input.firstName;
+  if (input.lastName !== undefined) patch.guest_last_name = input.lastName;
+  if (input.email !== undefined) patch.guest_email = input.email;
+  if (input.phone !== undefined) patch.guest_phone = input.phone;
+  if (input.country !== undefined) patch.guest_country = input.country;
+
+  if (Object.keys(patch).length === 0) {
+    return before;
+  }
+
+  if (patch.guest_first_name !== undefined || patch.guest_last_name !== undefined) {
+    const firstName = patch.guest_first_name ?? before.guest_first_name ?? '';
+    const lastName = patch.guest_last_name ?? before.guest_last_name ?? '';
+    patch.guest_name = `${firstName} ${lastName}`.trim();
+  }
+
+  const { data: updated, error } = await db
+    .from('bookings')
+    .update(patch)
+    .eq('id', bookingId)
+    .select('*')
+    .single();
+
+  if (error || !updated) {
+    throw new WorkflowError(`Could not update guest details: ${error?.message}`);
+  }
+
+  const changes: Record<string, unknown> = {};
+  for (const field of EDITABLE_GUEST_FIELDS) {
+    if (field in patch && before[field] !== updated[field]) {
+      changes[field] = { before: before[field], after: updated[field] };
+    }
+  }
+
+  await writeAuditLog(actor, {
+    action: 'booking.update_guest_info',
+    recordType: 'booking',
+    recordId: bookingId,
+    changes,
+  });
+
+  return updated;
+}
+
+/** Admin sets/replaces the private internal notes on a booking (never shown to the guest). */
+export async function updateInternalNotes(
+  bookingId: string,
+  actor: { id: string; email: string },
+  notes: string,
+): Promise<Booking> {
+  const db = createAdminSupabaseClient();
+  const before = await getBookingOrThrow(db, bookingId);
+
+  const { data: updated, error } = await db
+    .from('bookings')
+    .update({ admin_notes: notes })
+    .eq('id', bookingId)
+    .select('*')
+    .single();
+
+  if (error || !updated) {
+    throw new WorkflowError(`Could not update notes: ${error?.message}`);
+  }
+
+  await writeAuditLog(actor, {
+    action: 'booking.update_notes',
+    recordType: 'booking',
+    recordId: bookingId,
+    changes: { before: before.admin_notes, after: updated.admin_notes },
+  });
+
+  return updated;
+}
+
+/** Records a note that guest contact happened (call, email outside the automated flow, WhatsApp, etc). */
+export async function logGuestCommunication(
+  bookingId: string,
+  actor: { id: string; email: string },
+  input: { channel: GuestCommunicationChannel; direction: 'outbound' | 'inbound'; summary: string },
+): Promise<GuestCommunication> {
+  const db = createAdminSupabaseClient();
+  await getBookingOrThrow(db, bookingId);
+
+  const { data, error } = await db
+    .from('guest_communications')
+    .insert({
+      booking_id: bookingId,
+      channel: input.channel,
+      direction: input.direction,
+      summary: input.summary,
+      logged_by: actor.id,
+    })
+    .select('*')
+    .single();
+
+  if (error || !data) {
+    throw new WorkflowError(`Could not log communication: ${error?.message}`);
+  }
+
+  await writeAuditLog(actor, {
+    action: 'booking.log_communication',
+    recordType: 'booking',
+    recordId: bookingId,
+    changes: { channel: input.channel, direction: input.direction },
+  });
+
+  return data;
 }
