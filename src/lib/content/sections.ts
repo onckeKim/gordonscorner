@@ -7,6 +7,19 @@ import { aboutStory, propertyPhilosophy, whatGuestsCanExpect, hostIntro } from '
 import { contactIntro, checkInSupportInfo } from './contact';
 import { testimonials, type TestimonialEntry } from './testimonials';
 import type { AmenityIconKey } from './property';
+import {
+  bookingPolicyDefaults,
+  cancellationPolicyDefaults,
+  houseRulesDefaults,
+  damagesSecurityDefaults,
+  privacyDefaults,
+  type BookingPolicySection,
+  type CancellationPolicySection,
+  type PolicyItem,
+} from './policy-sections';
+
+export type { BookingPolicySection, CancellationPolicySection, CancellationTier, PolicyItem } from './policy-sections';
+export { POLICY_VERSION } from './policy-sections';
 
 /**
  * Every content_sections key the admin Content page can edit, paired with
@@ -133,16 +146,27 @@ export const socialContentDefaults: SocialContentSection = {
   tiktok: '',
 };
 
+export const bookingPolicyContentDefaults: BookingPolicySection = bookingPolicyDefaults;
+export const cancellationPolicyContentDefaults: CancellationPolicySection = cancellationPolicyDefaults;
+export const houseRulesContentDefaults: PolicyItem[] = houseRulesDefaults;
+export const damagesSecurityContentDefaults: PolicyItem[] = damagesSecurityDefaults;
+export const privacyContentDefaults: PolicyItem[] = privacyDefaults;
+
 export const CONTENT_SECTIONS = [
   { key: 'site', label: 'Home page & contact details' },
   { key: 'property', label: 'Property description' },
   { key: 'about', label: 'About page' },
   { key: 'contact', label: 'Contact page intro' },
   { key: 'amenities', label: 'Amenities' },
-  { key: 'policies', label: 'Policies' },
+  { key: 'policies', label: 'Policies (FAQ page summary)' },
   { key: 'faq', label: 'FAQs' },
   { key: 'gallery', label: 'Gallery images' },
   { key: 'testimonials', label: 'Testimonials' },
   { key: 'promo', label: 'Promotional banner' },
   { key: 'social', label: 'Social media links' },
+  { key: 'bookingPolicy', label: 'Policies page — Booking policy' },
+  { key: 'cancellationPolicy', label: 'Policies page — Cancellation policy' },
+  { key: 'houseRules', label: 'Policies page — House rules' },
+  { key: 'damagesSecurity', label: 'Policies page — Damages & security' },
+  { key: 'privacyPolicy', label: 'Policies page — Privacy' },
 ] as const;

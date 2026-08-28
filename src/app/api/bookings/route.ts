@@ -17,12 +17,16 @@ const bookingRequestSchema = z.object({
   message: z.string().trim().max(2000).optional(),
   bookingPurpose: z.enum(['leisure', 'business', 'other']).optional(),
   termsAgreed: z.literal(true, {
-    errorMap: () => ({ message: 'Please confirm you accept the booking terms.' }),
+    errorMap: () => ({ message: 'Please confirm you accept the booking policy.' }),
   }),
   cancellationPolicyAgreed: z.literal(true, {
     errorMap: () => ({ message: 'Please confirm you accept the cancellation policy.' }),
   }),
+  privacyPolicyAgreed: z.literal(true, {
+    errorMap: () => ({ message: 'Please confirm you accept the privacy policy.' }),
+  }),
   communicationConsent: z.boolean(),
+  policyVersion: z.string().trim().min(1).max(40),
 });
 
 /** Public endpoint: guest submits a new booking request. */

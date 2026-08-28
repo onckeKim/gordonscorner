@@ -44,7 +44,11 @@ export default async function FaqPage() {
       <div id="policies" className="mt-16 scroll-mt-24">
         <h2 className="font-display text-2xl font-semibold text-corner-charcoal">Policies</h2>
         <p className="mt-2 text-sm text-corner-muted">
-          The full cancellation and house-rules policy referenced when booking.
+          A short summary — see the full{' '}
+          <a href="/policies" className="text-corner-gold underline hover:no-underline">
+            booking, cancellation, house rules, damages &amp; security, and privacy policies
+          </a>{' '}
+          for complete details.
         </p>
         <div className="mt-4">
           <PolicyAccordion policies={policies} />

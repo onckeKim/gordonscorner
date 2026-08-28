@@ -2,23 +2,37 @@ import 'server-only';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
 import { calculateStayPricing } from '@/lib/pricing';
 import { getSettings, getEffectivePricingInputs } from '@/lib/settings';
+import { addDaysIso } from '@/lib/date-utils';
+import { siteConfig } from '@/lib/config';
 import { checkAvailability } from '@/lib/booking/availability';
 import { generateBookingReference, generatePaymentToken } from '@/lib/booking/reference';
 import { createPaymentLink } from '@/lib/payments';
 import {
   sendBookingReceivedEmail,
   sendAdminNewRequestEmail,
+  sendBookingAcceptedEmail,
   sendDepositLinkEmail,
+  sendDepositReminderEmail,
+  sendDepositDeadlineApproachingEmail,
+  sendDepositLinkExpiredEmail,
   sendDeclinedEmail,
+  sendBookingCancelledEmail,
   sendInfoRequestedEmail,
   sendDatesProposedEmail,
   sendBookingConfirmedEmail,
   sendAdminConfirmedEmail,
   sendReceiptEmail,
   sendRefundEmail,
+  sendBalanceReminderEmail,
+  sendPreArrivalEmail,
+  sendCheckInInstructionsEmail,
+  sendCheckOutReminderEmail,
+  sendPostStayThankYouEmail,
+  sendReviewRequestEmail,
   sendPaymentLinkResentEmail,
 } from '@/lib/email';
 import { writeAuditLog } from '@/lib/audit';
+import { RESENDABLE_EMAIL_TYPES, type ResendableEmailType } from '@/lib/booking/resendable-email-types';
 import type { Booking, BookingStatus, GuestCommunication, GuestCommunicationChannel, Payment, StatusActor } from '@/types/database';
 
 export class WorkflowError extends Error {}
@@ -85,13 +99,18 @@ export async function createBookingRequest(input: {
   bookingPurpose?: string;
   termsAgreed: boolean;
   cancellationPolicyAgreed: boolean;
+  privacyPolicyAgreed: boolean;
   communicationConsent: boolean;
+  policyVersion: string;
 }): Promise<Booking> {
   if (!input.termsAgreed) {
-    throw new WorkflowError('Please confirm you accept the booking terms.');
+    throw new WorkflowError('Please confirm you accept the booking policy.');
   }
   if (!input.cancellationPolicyAgreed) {
     throw new WorkflowError('Please confirm you accept the cancellation policy.');
+  }
+  if (!input.privacyPolicyAgreed) {
+    throw new WorkflowError('Please confirm you accept the privacy policy.');
   }
 
   const settings = await getSettings();
@@ -149,7 +168,9 @@ export async function createBookingRequest(input: {
       currency: pricing.currency,
       terms_agreed_at: now,
       cancellation_policy_agreed_at: now,
+      privacy_policy_agreed_at: now,
       communication_consent_at: input.communicationConsent ? now : null,
+      policy_version: input.policyVersion,
     })
     .select('*')
     .single();
@@ -451,7 +472,14 @@ export async function markDepositPaid(bookingId: string): Promise<Booking> {
 
   await recordHistory(db, bookingId, booking.status, 'confirmed', 'system', 'Deposit paid');
 
-  await Promise.all([sendBookingConfirmedEmail(updated), sendAdminConfirmedEmail(updated)]);
+  const settings = await getSettings();
+  const balanceDueDate =
+    updated.balance_amount > 0 ? addDaysIso(updated.check_in, -settings.balance_payment_deadline_days) : undefined;
+
+  await Promise.all([
+    sendBookingConfirmedEmail(updated, balanceDueDate),
+    sendAdminConfirmedEmail(updated),
+  ]);
 
   return updated;
 }
@@ -749,6 +777,7 @@ export async function cancelBooking(
   }
 
   await recordHistory(db, bookingId, booking.status, 'cancelled', 'admin', reason);
+  await sendBookingCancelledEmail(updated);
   return updated;
 }
 
@@ -837,6 +866,7 @@ export async function expireStaleHolds(): Promise<number> {
       .update({ status: 'expired', hold_expires_at: null })
       .eq('id', booking.id);
     await recordHistory(db, booking.id, booking.status, 'expired', 'system', 'Hold expired unpaid.');
+    await sendDepositLinkExpiredEmail(booking);
   }
 
   return expired?.length ?? 0;
@@ -956,6 +986,242 @@ export async function createManualBooking(actor: { id: string; email: string }, 
   }
 
   return data;
+}
+
+// ---------------------------------------------------------------------------
+// SCHEDULED / REMINDER EMAILS
+// ---------------------------------------------------------------------------
+// Each function below is idempotent per booking via one of the
+// *_sent_at columns (migration 0009) — safe to call repeatedly (e.g. by a
+// cron that runs more than once a day, or is retried). Intended to be
+// invoked together, once a day, by /api/cron/send-scheduled-emails.
+
+/** Deposit reminder once the hold is past its halfway point, unpaid. */
+export async function sendDueDepositReminders(): Promise<number> {
+  const db = createAdminSupabaseClient();
+  const settings = await getSettings();
+  const halfwayIso = new Date(Date.now() + (settings.hold_period_hours / 2) * 60 * 60 * 1000).toISOString();
+
+  const { data: due } = await db
+    .from('bookings')
+    .select('*')
+    .in('status', ['accepted_awaiting_deposit', 'deposit_processing'])
+    .is('deposit_reminder_sent_at', null)
+    .not('hold_expires_at', 'is', null)
+    .lte('hold_expires_at', halfwayIso)
+    .gt('hold_expires_at', new Date().toISOString());
+
+  for (const booking of due ?? []) {
+    if (!booking.payment_token) continue;
+    await sendDepositReminderEmail(booking, `${siteConfig.siteUrl}/pay/${booking.payment_token}`);
+    await db.from('bookings').update({ deposit_reminder_sent_at: new Date().toISOString() }).eq('id', booking.id);
+  }
+  return due?.length ?? 0;
+}
+
+/** Deposit deadline warning in the final hours before the hold expires. */
+export async function sendDueDepositDeadlineWarnings(): Promise<number> {
+  const db = createAdminSupabaseClient();
+  const settings = await getSettings();
+  const warningWindowHours = Math.min(6, settings.hold_period_hours / 4);
+  const warningIso = new Date(Date.now() + warningWindowHours * 60 * 60 * 1000).toISOString();
+
+  const { data: due } = await db
+    .from('bookings')
+    .select('*')
+    .in('status', ['accepted_awaiting_deposit', 'deposit_processing'])
+    .is('deposit_deadline_warning_sent_at', null)
+    .not('hold_expires_at', 'is', null)
+    .lte('hold_expires_at', warningIso)
+    .gt('hold_expires_at', new Date().toISOString());
+
+  for (const booking of due ?? []) {
+    if (!booking.payment_token) continue;
+    await sendDepositDeadlineApproachingEmail(booking, `${siteConfig.siteUrl}/pay/${booking.payment_token}`);
+    await db.from('bookings').update({ deposit_deadline_warning_sent_at: new Date().toISOString() }).eq('id', booking.id);
+  }
+  return due?.length ?? 0;
+}
+
+/** Balance-due reminder once the configured deadline has arrived, unpaid. */
+export async function sendDueBalanceReminders(): Promise<number> {
+  const db = createAdminSupabaseClient();
+  const settings = await getSettings();
+  const today = new Date().toISOString().slice(0, 10);
+  const reminderThreshold = addDaysIso(today, settings.balance_payment_deadline_days);
+
+  const { data: due } = await db
+    .from('bookings')
+    .select('*')
+    .in('status', ['confirmed', 'checked_in'])
+    .is('balance_paid_at', null)
+    .is('balance_reminder_sent_at', null)
+    .gt('balance_amount', 0)
+    .lte('check_in', reminderThreshold);
+
+  for (const booking of due ?? []) {
+    const dueDate = addDaysIso(booking.check_in, -settings.balance_payment_deadline_days);
+    await sendBalanceReminderEmail(booking, dueDate);
+    await db.from('bookings').update({ balance_reminder_sent_at: new Date().toISOString() }).eq('id', booking.id);
+  }
+  return due?.length ?? 0;
+}
+
+/** Pre-arrival information, sent once a confirmed stay is within 7 days. */
+export async function sendDuePreArrivalEmails(): Promise<number> {
+  const db = createAdminSupabaseClient();
+  const today = new Date().toISOString().slice(0, 10);
+  const windowEnd = addDaysIso(today, 7);
+
+  const { data: due } = await db
+    .from('bookings')
+    .select('*')
+    .eq('status', 'confirmed')
+    .is('pre_arrival_sent_at', null)
+    .gte('check_in', today)
+    .lte('check_in', windowEnd);
+
+  for (const booking of due ?? []) {
+    await sendPreArrivalEmail(booking);
+    await db.from('bookings').update({ pre_arrival_sent_at: new Date().toISOString() }).eq('id', booking.id);
+  }
+  return due?.length ?? 0;
+}
+
+/** Check-in instructions, sent the day before (or morning of) check-in. */
+export async function sendDueCheckInInstructions(): Promise<number> {
+  const db = createAdminSupabaseClient();
+  const today = new Date().toISOString().slice(0, 10);
+  const windowEnd = addDaysIso(today, 1);
+
+  const { data: due } = await db
+    .from('bookings')
+    .select('*')
+    .eq('status', 'confirmed')
+    .is('check_in_instructions_sent_at', null)
+    .gte('check_in', today)
+    .lte('check_in', windowEnd);
+
+  for (const booking of due ?? []) {
+    await sendCheckInInstructionsEmail(booking);
+    await db.from('bookings').update({ check_in_instructions_sent_at: new Date().toISOString() }).eq('id', booking.id);
+  }
+  return due?.length ?? 0;
+}
+
+/** Check-out reminder, sent the morning check-out is due. */
+export async function sendDueCheckOutReminders(): Promise<number> {
+  const db = createAdminSupabaseClient();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const { data: due } = await db
+    .from('bookings')
+    .select('*')
+    .in('status', ['confirmed', 'checked_in'])
+    .is('check_out_reminder_sent_at', null)
+    .eq('check_out', today);
+
+  for (const booking of due ?? []) {
+    await sendCheckOutReminderEmail(booking);
+    await db.from('bookings').update({ check_out_reminder_sent_at: new Date().toISOString() }).eq('id', booking.id);
+  }
+  return due?.length ?? 0;
+}
+
+/** Post-stay thank-you, sent the day after check-out. */
+export async function sendDuePostStayThankYous(): Promise<number> {
+  const db = createAdminSupabaseClient();
+  const yesterday = addDaysIso(new Date().toISOString().slice(0, 10), -1);
+
+  const { data: due } = await db
+    .from('bookings')
+    .select('*')
+    .in('status', ['checked_out', 'confirmed', 'checked_in'])
+    .is('thank_you_sent_at', null)
+    .eq('check_out', yesterday);
+
+  for (const booking of due ?? []) {
+    await sendPostStayThankYouEmail(booking);
+    await db.from('bookings').update({ thank_you_sent_at: new Date().toISOString() }).eq('id', booking.id);
+  }
+  return due?.length ?? 0;
+}
+
+/** Review request, sent a few days after check-out. */
+export async function sendDueReviewRequests(): Promise<number> {
+  const db = createAdminSupabaseClient();
+  const threeDaysAgo = addDaysIso(new Date().toISOString().slice(0, 10), -3);
+
+  const { data: due } = await db
+    .from('bookings')
+    .select('*')
+    .in('status', ['checked_out', 'confirmed', 'checked_in'])
+    .is('review_request_sent_at', null)
+    .eq('check_out', threeDaysAgo);
+
+  for (const booking of due ?? []) {
+    await sendReviewRequestEmail(booking);
+    await db.from('bookings').update({ review_request_sent_at: new Date().toISOString() }).eq('id', booking.id);
+  }
+  return due?.length ?? 0;
+}
+
+/**
+ * Admin "resend booking-related emails" — covers every guest email that
+ * doesn't need a freshly generated one-time payment link (those go through
+ * resendPaymentLink() above instead, which mints a new checkout session).
+ */
+export async function resendBookingEmail(
+  bookingId: string,
+  actor: { id: string; email: string },
+  emailType: ResendableEmailType,
+): Promise<void> {
+  const db = createAdminSupabaseClient();
+  const booking = await getBookingOrThrow(db, bookingId);
+
+  switch (emailType) {
+    case 'booking_received':
+      await sendBookingReceivedEmail(booking);
+      break;
+    case 'booking_accepted':
+      await sendBookingAcceptedEmail(booking);
+      break;
+    case 'booking_declined':
+      await sendDeclinedEmail(booking);
+      break;
+    case 'booking_cancelled':
+      await sendBookingCancelledEmail(booking);
+      break;
+    case 'booking_confirmed': {
+      const settings = await getSettings();
+      const balanceDueDate =
+        booking.balance_amount > 0 ? addDaysIso(booking.check_in, -settings.balance_payment_deadline_days) : undefined;
+      await sendBookingConfirmedEmail(booking, balanceDueDate);
+      break;
+    }
+    case 'pre_arrival':
+      await sendPreArrivalEmail(booking);
+      break;
+    case 'check_in_instructions':
+      await sendCheckInInstructionsEmail(booking);
+      break;
+    case 'check_out_reminder':
+      await sendCheckOutReminderEmail(booking);
+      break;
+    case 'post_stay_thank_you':
+      await sendPostStayThankYouEmail(booking);
+      break;
+    case 'review_request':
+      await sendReviewRequestEmail(booking);
+      break;
+  }
+
+  await writeAuditLog(actor, {
+    action: 'email.resend',
+    recordType: 'booking',
+    recordId: bookingId,
+    changes: { emailType },
+  });
 }
 
 const EDITABLE_GUEST_FIELDS = [

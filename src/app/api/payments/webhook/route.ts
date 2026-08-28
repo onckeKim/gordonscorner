@@ -7,7 +7,8 @@ import {
   markBalancePaidViaPayment,
   WorkflowError,
 } from '@/lib/booking/workflow';
-import { sendReceiptEmail } from '@/lib/email';
+import { sendReceiptEmail, sendPaymentFailedEmail } from '@/lib/email';
+import { siteConfig } from '@/lib/config';
 import type { WebhookEvent } from '@/lib/payments';
 
 export const dynamic = 'force-dynamic';
@@ -224,10 +225,21 @@ export async function POST(request: NextRequest) {
           await sendReceiptEmail(confirmedBooking, paidPayment);
         }
       }
-    } else if (event.paymentType === 'deposit') {
-      // Failed/cancelled deposit attempt — return to accepted_awaiting_deposit
-      // so the guest can retry from the same link, as long as the hold hasn't lapsed.
-      await markDepositFailed(event.bookingId);
+    } else {
+      if (event.paymentType === 'deposit') {
+        // Failed/cancelled deposit attempt — return to accepted_awaiting_deposit
+        // so the guest can retry from the same link, as long as the hold hasn't lapsed.
+        await markDepositFailed(event.bookingId);
+      }
+      // Balance failures don't change booking status (it's already confirmed
+      // either way) — just let the guest know so they can retry.
+      if (booking?.payment_token && (event.paymentType === 'deposit' || event.paymentType === 'balance')) {
+        await sendPaymentFailedEmail(
+          booking,
+          `${siteConfig.siteUrl}/pay/${booking.payment_token}`,
+          event.paymentType,
+        );
+      }
     }
     await logEvent(db, {
       bookingId: event.bookingId,

@@ -309,6 +309,123 @@ a paid, failed, or cancelled outcome — including resending the exact same
 webhook payload to exercise duplicate-handling. See "Connecting live
 services" below for switching to PayFast.
 
+## Email system (`src/lib/email/`)
+
+Every transactional email — 22 guest/admin events in total — is a branded,
+mobile-friendly HTML document with an automatically generated plain-text
+alternative, sent from server-only code, and logged to `email_log`
+(migration `0009`) regardless of success or failure.
+
+**Branding.** `src/lib/email/templates.ts:buildEmail()` wraps every email in
+the site's real palette (ivory `#F5F2ED`, forest `#2F4641`, gold `#B4852D`
+— see `globals.css`) and a CSS recreation of the script wordmark (`Alex
+Brush`, same as the site header — no raster logo file exists yet, see
+"Assumptions & placeholders"). It's a full `<!doctype html>` document with a
+`viewport` meta tag and a `max-width: 600px` centered table layout, so it
+reads correctly on a phone without a separate mobile template.
+
+**Plain text.** `stripHtmlToText()` derives a real plain-text part from each
+template's body HTML (converting `<a href>` to `text (url)`, list items to
+`- `, etc.) rather than duplicating every template by hand — every send
+therefore has both an HTML and a text/plain part.
+
+**The 22 events** (template function → trigger):
+| # | Event | Template | Trigger |
+|---|---|---|---|
+| 1 | Booking request received | `bookingReceivedEmail` | `createBookingRequest()` |
+| 2 | New request (admin) | `adminNewRequestEmail` | `createBookingRequest()` |
+| 3 | Information requested | `infoRequestedEmail` | `requestInfo()` |
+| 4 | Alternative dates proposed | `datesProposedEmail` | `proposeAlternativeDates()` |
+| 5 | Request accepted | `bookingAcceptedEmail` | resend-only (see below) |
+| 6 | Deposit payment link | `depositLinkEmail` | `acceptBooking()` |
+| 7 | Deposit reminder | `depositReminderEmail` | cron, hold >50% elapsed |
+| 8 | Deposit deadline approaching | `depositDeadlineApproachingEmail` | cron, final hours of hold |
+| 9 | Deposit link expired | `depositLinkExpiredEmail` | `expireStaleHolds()` |
+| 10 | Payment failed | `paymentFailedEmail` | `markDepositFailed()` / webhook (balance) |
+| 11 | Deposit received | `receiptEmail` (type=deposit) | payment webhook |
+| 12 | Booking confirmed | `bookingConfirmedEmail` | `markDepositPaid()` |
+| 13 | Booking declined | `declinedEmail` | `declineBooking()` |
+| 14 | Booking cancelled | `bookingCancelledEmail` | `cancelBooking()` |
+| 15 | Refund processed | `refundEmail` | `issueRefund()` |
+| 16 | Balance reminder | `balanceReminderEmail` | cron, balance deadline reached |
+| 17 | Balance received | `receiptEmail` (type=balance) | payment webhook / manual payment |
+| 18 | Pre-arrival information | `preArrivalEmail` | cron, check-in within 7 days |
+| 19 | Check-in instructions | `checkInInstructionsEmail` | cron, check-in within 1 day |
+| 20 | Check-out reminder | `checkOutReminderEmail` | cron, check-out is today |
+| 21 | Post-stay thank-you | `postStayThankYouEmail` | cron, check-out was yesterday |
+| 22 | Review request | `reviewRequestEmail` | cron, check-out was 3 days ago |
+
+Items 5 and 18–22 are date/state-based rather than a single action, so
+they're sent by `/api/cron/send-scheduled-emails` (daily, `vercel.json`) —
+each is idempotent per booking via a `*_sent_at` timestamp column added in
+migration `0009`, so a retried or extra cron run never double-sends.
+`bookingAcceptedEmail` is deliberately **not** auto-sent alongside the
+deposit-link email (#6) — sending both back-to-back on acceptance would be
+two near-identical emails seconds apart; it's available on demand instead
+(see below).
+
+**Booking confirmation email fields.** `bookingConfirmedEmail()` includes
+every field the spec requires: branding, guest name, reference, status,
+check-in/out dates, nights, guests, total, deposit paid, remaining balance,
+the remaining-balance due date (computed server-side in `markDepositPaid()`
+from `settings.balance_payment_deadline_days`), a property-address
+placeholder, check-in/out times, contact details, a link to view the
+booking, a link to `/policies`, and a "Next steps" list — and, like every
+guest-facing template in this file, never references `booking.admin_notes`.
+
+**Logging & delivery.** `src/lib/email/index.ts:send()` is the single choke
+point every email goes through: it sends (via Resend, or the console dev
+adapter when `RESEND_API_KEY` isn't set), then writes one `email_log` row
+— type, recipient, booking reference, sent date, `sent`/`failed` status,
+the provider's message id, and the failure reason if any — regardless of
+whether the send succeeded, and never throws (a failed email must never
+take down a booking-status transition).
+
+**Admin controls.** Each booking's detail page has an "Emails" panel
+(`src/components/admin/EmailPanel.tsx`) showing that booking's delivery
+history and a "resend" picker covering every applicable guest email
+(`resendBookingEmail()` in workflow.ts) — this is what "resend booking-
+related emails" from the admin portal spec maps to; deposit/balance
+payment *links* specifically are resent via the separate
+`resendPaymentLink()` flow instead, since those need a freshly minted
+one-time checkout session, not just a re-send of the same content.
+
+## Policies page (`/policies`)
+
+A single comprehensive page — booking policy, cancellation policy (with
+configurable refund tiers), house rules, damages & security, and privacy —
+each section backed by `content_sections` (migration `0008`/`0010`) and
+editable from `/admin/content`, with static defaults in
+`src/lib/content/policy-sections.ts`.
+
+**Legal disclaimer.** Both the public page and the admin editor display a
+prominent notice that this is starting-point wording, not vetted legal
+text — the property owner must review it, and the cancellation/damages/
+privacy sections specifically should be checked by a South African legal
+professional (POPIA compliance for the privacy section in particular)
+before being relied on for real bookings.
+
+**Configurable cancellation tiers.** Rather than hardcoding a refund
+percentage into prose, `cancellationPolicy.tiers` is a structured array —
+`{ label, minDaysBeforeCheckIn, refundPercent }` — editable as a table from
+`/admin/content` (`CancellationTiersEditor.tsx`) and rendered as a table on
+the public page. The default ships with three tiers (100% / 50% / 0%
+refund at 14+ / 7–13 / <7 days before check-in) but an admin can add,
+remove, or change any tier without touching code.
+
+**Consent versioning.** The booking form requires three separate,
+independently unchecked checkboxes — booking policy, cancellation policy,
+privacy policy — plus an unchecked-by-default (never pre-selected)
+communication-consent checkbox. `POLICY_VERSION`
+(`src/lib/content/policy-sections.ts`) is submitted alongside the
+acceptance and stored on the booking (`bookings.policy_version`), together
+with `terms_agreed_at`, `cancellation_policy_agreed_at`, and the newly
+added `privacy_policy_agreed_at` (migration `0010`) — so a booking's
+acceptance always points to exactly which wording of `/policies` the guest
+saw, even if the page is edited later. The admin booking-detail page
+displays the accepted version, timestamp, and whether communication
+consent was given.
+
 ## Design system
 
 Colors, spacing and type live as tokens, not one-off values:

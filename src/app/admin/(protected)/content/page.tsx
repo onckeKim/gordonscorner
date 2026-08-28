@@ -12,6 +12,11 @@ import {
   testimonialsContentDefaults,
   promoContentDefaults,
   socialContentDefaults,
+  bookingPolicyContentDefaults,
+  cancellationPolicyContentDefaults,
+  houseRulesContentDefaults,
+  damagesSecurityContentDefaults,
+  privacyContentDefaults,
   type SiteContentSection,
   type PropertyContentSection,
   type AboutContentSection,
@@ -19,6 +24,9 @@ import {
   type AmenityEntry,
   type PromoContentSection,
   type SocialContentSection,
+  type BookingPolicySection,
+  type CancellationPolicySection,
+  type PolicyItem,
 } from '@/lib/content/sections';
 import type { FaqGroup } from '@/lib/content/faq';
 import type { PolicyEntry } from '@/lib/content/policies';
@@ -26,11 +34,29 @@ import type { GalleryPhoto } from '@/lib/content/gallery';
 import type { TestimonialEntry } from '@/lib/content/testimonials';
 import { TextFieldsSection, ObjectListSection, StringListSection } from '@/components/admin/content/ContentEditors';
 import { FaqEditor } from '@/components/admin/content/FaqEditor';
+import { CancellationTiersEditor } from '@/components/admin/content/CancellationTiersEditor';
 
 export default async function AdminContentPage() {
   await requireRole('admin');
 
-  const [site, property, about, contact, amenities, policies, faq, gallery, testimonials, promo, social] = await Promise.all([
+  const [
+    site,
+    property,
+    about,
+    contact,
+    amenities,
+    policies,
+    faq,
+    gallery,
+    testimonials,
+    promo,
+    social,
+    bookingPolicy,
+    cancellationPolicy,
+    houseRules,
+    damagesSecurity,
+    privacyPolicy,
+  ] = await Promise.all([
     getContentSection<SiteContentSection>('site', siteContentDefaults),
     getContentSection<PropertyContentSection>('property', propertyContentDefaults),
     getContentSection<AboutContentSection>('about', aboutContentDefaults),
@@ -42,6 +68,11 @@ export default async function AdminContentPage() {
     getContentSection<TestimonialEntry[]>('testimonials', testimonialsContentDefaults),
     getContentSection<PromoContentSection>('promo', promoContentDefaults),
     getContentSection<SocialContentSection>('social', socialContentDefaults),
+    getContentSection<BookingPolicySection>('bookingPolicy', bookingPolicyContentDefaults),
+    getContentSection<CancellationPolicySection>('cancellationPolicy', cancellationPolicyContentDefaults),
+    getContentSection<PolicyItem[]>('houseRules', houseRulesContentDefaults),
+    getContentSection<PolicyItem[]>('damagesSecurity', damagesSecurityContentDefaults),
+    getContentSection<PolicyItem[]>('privacyPolicy', privacyContentDefaults),
   ]);
 
   return (
@@ -188,6 +219,88 @@ export default async function AdminContentPage() {
         />
 
         <FaqEditor initialValue={faq} />
+      </div>
+
+      <h2 className="mt-10 font-display text-2xl font-semibold">Policies page</h2>
+      <p className="mt-2 max-w-2xl text-sm text-corner-error">
+        This is starting-point wording, not vetted legal text. The property owner must review it,
+        and — for the cancellation, damages, and privacy sections especially — have it checked by
+        a South African legal professional before relying on it.
+      </p>
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <div className="card space-y-4">
+          <TextFieldsSection
+            sectionKey="bookingPolicy"
+            title="Booking policy — intro"
+            initialValue={{ ...bookingPolicy }}
+            fields={[{ key: 'intro', label: 'Intro', type: 'textarea' }]}
+          />
+          <StringListSection
+            sectionKey="bookingPolicy"
+            title="Booking policy — points"
+            path="items"
+            initialValue={bookingPolicy.items}
+            fullSection={{ ...bookingPolicy }}
+          />
+        </div>
+
+        <div className="card space-y-4">
+          <h2 className="font-display text-lg font-semibold">Cancellation policy</h2>
+          <CancellationTiersEditor section={cancellationPolicy} />
+          <TextFieldsSection
+            sectionKey="cancellationPolicy"
+            title="Cancellation policy — details"
+            initialValue={{ ...cancellationPolicy }}
+            fields={[
+              { key: 'guestCancellationProcedure', label: 'Guest cancellation procedure', type: 'textarea' },
+              { key: 'refundEligibility', label: 'Refund eligibility', type: 'textarea' },
+              { key: 'adminAndProviderCharges', label: 'Administrative/provider charges', type: 'textarea' },
+              { key: 'lateCancellation', label: 'Late cancellation', type: 'textarea' },
+              { key: 'noShowProcedure', label: 'No-show procedure', type: 'textarea' },
+              { key: 'earlyDeparture', label: 'Early departure', type: 'textarea' },
+              { key: 'cancellationByProperty', label: 'Cancellation by the property', type: 'textarea' },
+              { key: 'exceptionalCircumstances', label: 'Exceptional circumstances', type: 'textarea' },
+              { key: 'refundProcessingTime', label: 'Refund processing time', type: 'textarea' },
+            ]}
+          />
+        </div>
+
+        <ObjectListSection
+          sectionKey="houseRules"
+          title="House rules"
+          fields={[
+            { key: 'id', label: 'ID (unique, no spaces)' },
+            { key: 'title', label: 'Title' },
+            { key: 'content', label: 'Content', type: 'textarea' },
+          ]}
+          initialValue={houseRules.map((h) => ({ ...h }))}
+          emptyRow={{ id: `rule-${Date.now()}`, title: '', content: '' }}
+        />
+
+        <ObjectListSection
+          sectionKey="damagesSecurity"
+          title="Damages & security"
+          fields={[
+            { key: 'id', label: 'ID (unique, no spaces)' },
+            { key: 'title', label: 'Title' },
+            { key: 'content', label: 'Content', type: 'textarea' },
+          ]}
+          initialValue={damagesSecurity.map((d) => ({ ...d }))}
+          emptyRow={{ id: `damages-${Date.now()}`, title: '', content: '' }}
+        />
+
+        <ObjectListSection
+          sectionKey="privacyPolicy"
+          title="Privacy"
+          fields={[
+            { key: 'id', label: 'ID (unique, no spaces)' },
+            { key: 'title', label: 'Title' },
+            { key: 'content', label: 'Content', type: 'textarea' },
+          ]}
+          initialValue={privacyPolicy.map((p) => ({ ...p }))}
+          emptyRow={{ id: `privacy-${Date.now()}`, title: '', content: '' }}
+        />
       </div>
     </div>
   );

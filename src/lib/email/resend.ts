@@ -16,16 +16,20 @@ function getClient(): Resend {
   return client;
 }
 
-export async function sendViaResend(to: string, content: EmailContent): Promise<void> {
+/** Returns the provider's message id on success — used for the email_log audit trail. */
+export async function sendViaResend(to: string, content: EmailContent): Promise<{ messageId: string | null }> {
   const from = process.env.EMAIL_FROM ?? `${siteConfig.propertyName} <bookings@gordonscorner.co.za>`;
-  const { error } = await getClient().emails.send({
+  const { data, error } = await getClient().emails.send({
     from,
     to,
     subject: content.subject,
     html: content.html,
+    text: content.text,
   });
 
   if (error) {
     throw new Error(`Resend failed to send email: ${error.message}`);
   }
+
+  return { messageId: data?.id ?? null };
 }

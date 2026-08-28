@@ -10,6 +10,7 @@ import { Alert } from '@/components/ui/Alert';
 import { calculateStayPricing, type PricingInputs } from '@/lib/pricing';
 import { propertyDetails } from '@/lib/config';
 import type { PublicSettings } from '@/lib/settings';
+import { POLICY_VERSION } from '@/lib/content/policy-sections';
 
 /**
  * Fetched once on mount from /api/settings/public so the live estimate
@@ -125,7 +126,8 @@ export function BookingForm() {
   const [bookingPurpose, setBookingPurpose] = useState('');
   const [termsAgreed, setTermsAgreed] = useState(false);
   const [cancellationPolicyAgreed, setCancellationPolicyAgreed] = useState(false);
-  const [communicationConsent, setCommunicationConsent] = useState(true);
+  const [privacyPolicyAgreed, setPrivacyPolicyAgreed] = useState(false);
+  const [communicationConsent, setCommunicationConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -146,7 +148,7 @@ export function BookingForm() {
   const maxGuests = liveSettings?.guestCapacity ?? propertyDetails.maxGuests;
   const totalGuests = adultsCount + childrenCount;
   const overCapacity = totalGuests > maxGuests;
-  const canSubmit = termsAgreed && cancellationPolicyAgreed;
+  const canSubmit = termsAgreed && cancellationPolicyAgreed && privacyPolicyAgreed;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -161,7 +163,7 @@ export function BookingForm() {
       return;
     }
     if (!canSubmit) {
-      setError('Please accept the booking terms and cancellation policy before requesting to book.');
+      setError('Please accept the booking policy, cancellation policy, and privacy policy before requesting to book.');
       return;
     }
 
@@ -185,7 +187,9 @@ export function BookingForm() {
           bookingPurpose: bookingPurpose || undefined,
           termsAgreed,
           cancellationPolicyAgreed,
+          privacyPolicyAgreed,
           communicationConsent,
+          policyVersion: POLICY_VERSION,
         }),
       });
 
@@ -380,8 +384,8 @@ export function BookingForm() {
             />
             <span>
               I accept the{' '}
-              <a href="/faq#policies" className="text-corner-gold underline hover:no-underline" target="_blank" rel="noreferrer">
-                booking terms
+              <a href="/policies#booking" className="text-corner-gold underline hover:no-underline" target="_blank" rel="noreferrer">
+                booking policy
               </a>
               .
             </span>
@@ -396,8 +400,24 @@ export function BookingForm() {
             />
             <span>
               I accept the{' '}
-              <a href="/faq#policies" className="text-corner-gold underline hover:no-underline" target="_blank" rel="noreferrer">
+              <a href="/policies#cancellation" className="text-corner-gold underline hover:no-underline" target="_blank" rel="noreferrer">
                 cancellation policy
+              </a>
+              .
+            </span>
+          </label>
+          <label className="flex items-start gap-2.5 text-sm text-corner-muted">
+            <input
+              type="checkbox"
+              checked={privacyPolicyAgreed}
+              onChange={(e) => setPrivacyPolicyAgreed(e.target.checked)}
+              required
+              className="mt-0.5 h-4 w-4 rounded border-corner-stone text-corner-gold focus:ring-corner-gold"
+            />
+            <span>
+              I accept the{' '}
+              <a href="/policies#privacy" className="text-corner-gold underline hover:no-underline" target="_blank" rel="noreferrer">
+                privacy policy
               </a>
               .
             </span>

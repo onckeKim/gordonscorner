@@ -71,7 +71,18 @@ export type Booking = {
   payment_token: string | null;
   terms_agreed_at: string | null;
   cancellation_policy_agreed_at: string | null;
+  privacy_policy_agreed_at: string | null;
   communication_consent_at: string | null;
+  policy_version: string | null;
+
+  deposit_reminder_sent_at: string | null;
+  deposit_deadline_warning_sent_at: string | null;
+  balance_reminder_sent_at: string | null;
+  pre_arrival_sent_at: string | null;
+  check_in_instructions_sent_at: string | null;
+  check_out_reminder_sent_at: string | null;
+  thank_you_sent_at: string | null;
+  review_request_sent_at: string | null;
 
   created_at: string;
   updated_at: string;
@@ -230,6 +241,19 @@ export type GuestCommunication = {
   created_at: string;
 }
 
+export type EmailLogEntry = {
+  id: string;
+  email_type: string;
+  recipient: string;
+  booking_id: string | null;
+  booking_reference: string | null;
+  status: 'sent' | 'failed';
+  provider: string;
+  provider_message_id: string | null;
+  failure_reason: string | null;
+  sent_at: string;
+}
+
 /** Minimal typed shape for the Supabase generated Database type. */
 export type Database = {
   public: {
@@ -306,6 +330,12 @@ export type Database = {
         Row: GuestCommunication;
         Insert: Partial<GuestCommunication> & Pick<GuestCommunication, 'booking_id' | 'summary'>;
         Update: Partial<GuestCommunication>;
+        Relationships: [];
+      };
+      email_log: {
+        Row: EmailLogEntry;
+        Insert: Partial<EmailLogEntry> & Pick<EmailLogEntry, 'email_type' | 'recipient' | 'status' | 'provider'>;
+        Update: Partial<EmailLogEntry>;
         Relationships: [];
       };
     };

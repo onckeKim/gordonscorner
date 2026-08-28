@@ -9,6 +9,7 @@ import { PaymentsPanel } from '@/components/admin/PaymentsPanel';
 import { GuestInfoEditor } from '@/components/admin/GuestInfoEditor';
 import { CommunicationLog } from '@/components/admin/CommunicationLog';
 import { InternalNotes } from '@/components/admin/InternalNotes';
+import { EmailPanel } from '@/components/admin/EmailPanel';
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString('en-ZA', {
@@ -31,20 +32,22 @@ export default async function AdminBookingDetailPage({
 
   const supabase = await createServerSupabaseClient();
 
-  const [{ data: booking }, { data: history }, { data: payments }, { data: communications }] = await Promise.all([
-    supabase.from('bookings').select('*').eq('id', id).single(),
-    supabase
-      .from('booking_status_history')
-      .select('*')
-      .eq('booking_id', id)
-      .order('created_at', { ascending: false }),
-    supabase.from('payments').select('*').eq('booking_id', id).order('created_at', { ascending: false }),
-    supabase
-      .from('guest_communications')
-      .select('*')
-      .eq('booking_id', id)
-      .order('created_at', { ascending: false }),
-  ]);
+  const [{ data: booking }, { data: history }, { data: payments }, { data: communications }, { data: emailHistory }] =
+    await Promise.all([
+      supabase.from('bookings').select('*').eq('id', id).single(),
+      supabase
+        .from('booking_status_history')
+        .select('*')
+        .eq('booking_id', id)
+        .order('created_at', { ascending: false }),
+      supabase.from('payments').select('*').eq('booking_id', id).order('created_at', { ascending: false }),
+      supabase
+        .from('guest_communications')
+        .select('*')
+        .eq('booking_id', id)
+        .order('created_at', { ascending: false }),
+      supabase.from('email_log').select('*').eq('booking_id', id).order('sent_at', { ascending: false }),
+    ]);
 
   if (!booking) {
     notFound();
@@ -149,6 +152,18 @@ export default async function AdminBookingDetailPage({
               <p>{booking.message}</p>
             </div>
           )}
+
+          {booking.policy_version && (
+            <div className="mt-4 border-t border-corner-stone pt-4 text-xs text-corner-muted">
+              <p>
+                Accepted policies version {booking.policy_version} on{' '}
+                {booking.terms_agreed_at && formatDateTime(booking.terms_agreed_at)}
+                {booking.communication_consent_at
+                  ? ' — including marketing/communication consent.'
+                  : ' — marketing/communication consent not given.'}
+              </p>
+            </div>
+          )}
         </div>
 
         <PaymentsPanel bookingId={id} payments={payments ?? []} />
@@ -156,6 +171,8 @@ export default async function AdminBookingDetailPage({
         <InternalNotes bookingId={id} notes={booking.admin_notes} />
 
         <CommunicationLog bookingId={id} communications={communications ?? []} />
+
+        <EmailPanel bookingId={id} history={emailHistory ?? []} />
 
         <div className="card">
           <h2 className="font-display text-lg font-semibold">History</h2>

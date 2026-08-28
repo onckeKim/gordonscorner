@@ -12,8 +12,9 @@ const EXPLORE_LINKS = [
 ];
 
 const POLICY_LINKS = [
-  { href: '/faq#policies', label: 'Cancellation policy' },
-  { href: '/faq#policies', label: 'House rules' },
+  { href: '/policies#cancellation', label: 'Cancellation policy' },
+  { href: '/policies#house-rules', label: 'House rules' },
+  { href: '/policies#privacy', label: 'Privacy' },
   { href: '/contact', label: 'Contact us' },
   { href: '/booking/lookup', label: 'Find my booking' },
 ];
