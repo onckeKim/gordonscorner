@@ -5,6 +5,7 @@ import { markUnderReviewIfNeeded } from '@/lib/booking/workflow';
 import { StatusBadge } from '@/components/StatusBadge';
 import { BookingActions } from '@/components/admin/BookingActions';
 import { PriceBreakdown } from '@/components/PriceBreakdown';
+import { PaymentsPanel } from '@/components/admin/PaymentsPanel';
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString('en-ZA', {
@@ -47,7 +48,15 @@ export default async function AdminBookingDetailPage({
         <div className="card">
           <div className="flex items-center justify-between">
             <h1 className="font-display text-2xl font-semibold">{booking.guest_name}</h1>
-            <StatusBadge status={booking.status} />
+            <div className="flex items-center gap-3">
+              <a
+                href={`/api/admin/bookings/export?bookingId=${id}`}
+                className="text-xs text-corner-gold underline hover:no-underline"
+              >
+                Download booking record
+              </a>
+              <StatusBadge status={booking.status} />
+            </div>
           </div>
           <p className="text-sm text-corner-muted">
             {booking.guest_email}
@@ -121,38 +130,7 @@ export default async function AdminBookingDetailPage({
           )}
         </div>
 
-        <div className="card">
-          <h2 className="font-display text-lg font-semibold">Payments</h2>
-          <table className="mt-3 w-full text-left text-sm">
-            <thead className="text-xs uppercase text-corner-muted">
-              <tr>
-                <th className="py-1.5">Type</th>
-                <th className="py-1.5">Amount</th>
-                <th className="py-1.5">Status</th>
-                <th className="py-1.5">Reference</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(payments ?? []).map((p) => (
-                <tr key={p.id} className="border-t border-corner-stone">
-                  <td className="py-1.5 capitalize">{p.type}</td>
-                  <td className="py-1.5">
-                    {new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(p.amount)}
-                  </td>
-                  <td className="py-1.5 capitalize">{p.status}</td>
-                  <td className="py-1.5 text-corner-muted">{p.provider_reference ?? '—'}</td>
-                </tr>
-              ))}
-              {(payments ?? []).length === 0 && (
-                <tr>
-                  <td colSpan={4} className="py-3 text-corner-muted">
-                    No payment attempts yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <PaymentsPanel bookingId={id} payments={payments ?? []} />
 
         <div className="card">
           <h2 className="font-display text-lg font-semibold">History</h2>

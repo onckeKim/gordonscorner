@@ -1,5 +1,5 @@
 import { siteConfig, bookingRules } from '@/lib/config';
-import type { Booking } from '@/types/database';
+import type { Booking, Payment } from '@/types/database';
 
 export interface EmailContent {
   subject: string;
@@ -146,6 +146,57 @@ export function balancePaymentLinkEmail(booking: Booking, paymentUrl: string): E
       `<p>Your remaining balance of <strong>${formatZar(booking.balance_amount)}</strong> is due.</p>
        <p style="text-align:center;margin:28px 0;">
          <a href="${paymentUrl}" style="background:#B4852D;color:#fff;padding:12px 28px;border-radius:999px;text-decoration:none;font-size:15px;">Pay balance securely</a>
+       </p>`,
+    ),
+  };
+}
+
+export function receiptEmail(booking: Booking, payment: Payment): EmailContent {
+  const paidAt = payment.paid_at ?? payment.created_at;
+  return {
+    subject: `Receipt — ${payment.type === 'deposit' ? 'deposit' : 'balance'} payment received (${booking.reference ?? booking.id.slice(0, 8)})`,
+    html: shell(
+      'Payment receipt',
+      `<p>Thank you — we've received your ${payment.type === 'deposit' ? 'deposit' : 'balance'} payment.</p>
+       <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+         <tr><td style="padding:4px 0;color:#6F6A63;">Amount paid</td><td style="padding:4px 0;text-align:right;"><strong>${formatZar(payment.amount)}</strong></td></tr>
+         <tr><td style="padding:4px 0;color:#6F6A63;">Currency</td><td style="padding:4px 0;text-align:right;">${booking.currency}</td></tr>
+         <tr><td style="padding:4px 0;color:#6F6A63;">Date</td><td style="padding:4px 0;text-align:right;">${formatDate(paidAt)}</td></tr>
+         <tr><td style="padding:4px 0;color:#6F6A63;">Payment method</td><td style="padding:4px 0;text-align:right;text-transform:capitalize;">${payment.provider}</td></tr>
+         <tr><td style="padding:4px 0;color:#6F6A63;">Reference</td><td style="padding:4px 0;text-align:right;">${payment.provider_reference ?? payment.id.slice(0, 8)}</td></tr>
+         ${booking.reference ? `<tr><td style="padding:4px 0;color:#6F6A63;">Booking reference</td><td style="padding:4px 0;text-align:right;">${booking.reference}</td></tr>` : ''}
+       </table>
+       ${bookingSummary(booking)}
+       <p>View your booking anytime: <a href="${siteConfig.siteUrl}/booking/${booking.id}">${siteConfig.siteUrl}/booking/${booking.id}</a></p>`,
+    ),
+  };
+}
+
+export function refundEmail(booking: Booking, payment: Payment): EmailContent {
+  return {
+    subject: `Refund processed — ${booking.reference ?? booking.id.slice(0, 8)}`,
+    html: shell(
+      'Refund confirmation',
+      `<p>A refund has been recorded for your booking.</p>
+       <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+         <tr><td style="padding:4px 0;color:#6F6A63;">Amount refunded</td><td style="padding:4px 0;text-align:right;"><strong>${formatZar(payment.amount)}</strong></td></tr>
+         <tr><td style="padding:4px 0;color:#6F6A63;">Date</td><td style="padding:4px 0;text-align:right;">${formatDate(payment.paid_at ?? payment.created_at)}</td></tr>
+         ${payment.admin_note ? `<tr><td style="padding:4px 0;color:#6F6A63;">Note</td><td style="padding:4px 0;text-align:right;">${payment.admin_note}</td></tr>` : ''}
+       </table>
+       <p>Refunds are typically returned to your original payment method within 5–7 business days.</p>`,
+    ),
+  };
+}
+
+export function paymentLinkResentEmail(booking: Booking, paymentUrl: string, type: 'deposit' | 'balance'): EmailContent {
+  const amount = type === 'deposit' ? booking.deposit_amount : booking.balance_amount;
+  return {
+    subject: `Your payment link — ${booking.reference ?? booking.id.slice(0, 8)}`,
+    html: shell(
+      'Here’s your payment link again',
+      `<p>As requested, here's a fresh link to pay your ${type === 'deposit' ? 'deposit' : 'remaining balance'} of <strong>${formatZar(amount)}</strong>.</p>
+       <p style="text-align:center;margin:28px 0;">
+         <a href="${paymentUrl}" style="background:#B4852D;color:#fff;padding:12px 28px;border-radius:999px;text-decoration:none;font-size:15px;">Pay securely</a>
        </p>`,
     ),
   };

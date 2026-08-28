@@ -3,18 +3,12 @@ import { requireAdmin } from '@/lib/auth/admin';
 import { resendPaymentLink } from '@/lib/booking/workflow';
 import { handleApiError } from '@/lib/api-response';
 
-/**
- * Admin-triggered, optional convenience: emails the guest a secure link to
- * pay the remaining balance online. Not required by the core workflow —
- * admins can simply mark the balance as paid once settled by any means
- * (EFT, cash, card on arrival) — but useful when a guest wants to settle
- * the balance ahead of time, or to resend a link they've lost.
- */
+/** Admin: resend the deposit payment link (e.g. the guest lost the original email). */
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const admin = await requireAdmin();
     const { id } = await params;
-    await resendPaymentLink(id, admin.id, 'balance');
+    await resendPaymentLink(id, admin.id, 'deposit');
     return NextResponse.json({ ok: true });
   } catch (err) {
     return handleApiError(err);

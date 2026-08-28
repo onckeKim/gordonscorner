@@ -106,6 +106,98 @@ Two layers, not one:
    which `acceptBooking()` catches and turns into a `DoubleBookingError` the
    admin UI shows as a normal error, not a crash.
 
+## Payment engine
+
+The 50% deposit flow is designed around one rule: **the guest is never
+charged before an admin accepts the request**, and **the booking only
+becomes `confirmed` after a verified server-side webhook confirms payment**
+— never from the browser redirect back from the payment provider.
+
+```
+admin accepts ─▶ dates held, deposit link emailed (accepted_awaiting_deposit)
+                     │
+guest opens /pay/[token] ─▶ deposit_processing ─▶ redirected to provider
+                     │
+provider POSTs a signed webhook to /api/payments/webhook
+                     │
+      ┌── signature + remote validation pass ──▶ payments row → paid
+      │        │
+      │        └─▶ markDepositPaid() → confirmed, receipt + admin emails sent
+      │
+      └── invalid / duplicate / mismatched ──▶ logged, booking status unchanged
+```
+
+**Idempotency (two layers).** Every payment attempt gets a unique
+`idempotency_key` the first time a link is generated (`createPaymentLink()`
+in `src/lib/payments/index.ts`) — reloading the pay page or clicking "resend"
+reuses the same key rather than minting a new attempt. That key round-trips
+through the provider (PayFast's `m_payment_id`/`custom_str3`) and comes back
+on the webhook, so a retried delivery resolves to the same `payments` row
+instead of creating a second one. Independently, `provider_reference` carries
+a partial **unique index** (`payments_provider_reference_unique`,
+migration `0006`) as a database-level backstop — a `23505` unique-violation
+on insert is caught and treated as a duplicate, not an error, so retries are
+always safe to replay.
+
+**Webhook verification** (`src/app/api/payments/webhook/route.ts`,
+`src/lib/payments/payfast.ts`) checks the ITN's MD5 signature *and* performs
+PayFast's server-to-server `/eng/query/validate` round-trip before trusting
+it — a browser-only "payment success" redirect is never sufficient on its
+own (see `/pay/[token]/return/page.tsx`, which only ever says "we're
+confirming your payment now", not that it succeeded).
+
+**Audit trail.** `payments` (current state per attempt: type, amount,
+currency via the booking, status, provider, reference, timestamps) is
+paired with an append-only `payment_events` table (migration `0006`) that
+logs every occurrence — webhook received, verification failed, duplicate
+ignored, over/underpayment detected, manual payment recorded, refund
+recorded, note added, link resent — regardless of whether it changed
+anything. Nothing is ever deleted or overwritten in `payment_events`.
+
+**Over/underpayment.** If a verified webhook's amount doesn't match the
+expected deposit/balance to the cent, the payment still confirms — declining
+to honour money that was genuinely received would be worse than a paperwork
+mismatch — but a `payment_events` row is logged and a timestamped note is
+appended to the booking's `admin_notes` for manual reconciliation.
+
+**Payment statuses:** `pending → processing → paid`, or `failed` /
+`cancelled`; a `paid` payment can later become `refunded` or
+`partially_refunded` via an admin-recorded refund.
+
+**Admin payment functions** (`src/components/admin/PaymentsPanel.tsx`,
+booking detail page, and the global `/admin/payments` ledger):
+- View every payment attempt for a booking, or all payments site-wide,
+  with status filters.
+- Re-send a deposit or balance payment link (`resendPaymentLink()` —
+  reuses the same idempotency key, emails a fresh link).
+- Record an EFT/manual payment (`recordManualPayment()`) — always an
+  explicit admin action, always logged to `payment_events`, and this is
+  also what powers the one-click "mark balance as paid" button so it
+  creates a proper audit row instead of silently flipping a timestamp.
+- Upload proof of payment (private Supabase Storage bucket
+  `payment-proofs`; served back to admins only via short-lived signed URLs,
+  never a public URL).
+- Issue/record a refund (`issueRefund()`) — this **records** a refund
+  already processed with the provider directly; it does not call a
+  provider refund API (most merchant accounts don't expose one by
+  default), which is stated in the admin UI itself.
+- Add an internal note to any payment row.
+- Download payment and booking records as CSV
+  (`/api/admin/payments/export`, `/api/admin/bookings/export` — both
+  accept `?bookingId=` to scope to one booking).
+
+**Expired/used links.** `/pay/[token]` distinguishes three "nothing to pay"
+cases with different messaging: the hold expired before payment (dates
+released, guest is told to get in touch), the booking was declined/
+cancelled/marked no-show (link no longer valid), and everything due is
+already paid (link was already used successfully).
+
+**Dev mode.** Without live credentials, `PAYMENT_PROVIDER=dev` (the
+default) routes checkout to `/pay/simulate`, a page that lets you simulate
+a paid, failed, or cancelled outcome — including resending the exact same
+webhook payload to exercise duplicate-handling. See "Connecting live
+services" below for switching to PayFast.
+
 ## Design system
 
 Colors, spacing and type live as tokens, not one-off values:
@@ -247,11 +339,12 @@ simulated payments). To go live:
    passphrase (Settings → Integration).
 2. Set `PAYMENT_PROVIDER=payfast`, `PAYFAST_MERCHANT_ID`, `PAYFAST_MERCHANT_KEY`,
    `PAYFAST_PASSPHRASE`, and `PAYFAST_MODE=live` once ready (`sandbox` until then).
-3. Before accepting real payments, harden `src/lib/payments/payfast.ts` per the
-   checklist in its header comment: re-validate each ITN against PayFast's
-   `/eng/query/validate` endpoint and restrict accepted source IPs to PayFast's
-   published ranges. Signature verification (already implemented) is the minimum
-   bar for staging, not for production.
+3. Signature verification *and* the server-to-server `/eng/query/validate`
+   ITN confirmation are both already implemented in
+   `src/lib/payments/payfast.ts` — no code changes needed to go live. The one
+   optional extra hardening step PayFast recommends is restricting accepted
+   webhook source IPs to PayFast's published ranges at your edge/firewall,
+   which is infrastructure-level and outside this repo.
 4. To use Peach Payments or Yoco instead, implement the `PaymentProvider`
    interface in `src/lib/payments/types.ts` (see `payfast.ts` as a template),
    register it in `src/lib/payments/index.ts`, and set `PAYMENT_PROVIDER`

@@ -14,8 +14,11 @@ import {
   sendDatesProposedEmail,
   sendBookingConfirmedEmail,
   sendAdminConfirmedEmail,
+  sendReceiptEmail,
+  sendRefundEmail,
+  sendPaymentLinkResentEmail,
 } from '@/lib/email';
-import type { Booking, BookingStatus, StatusActor } from '@/types/database';
+import type { Booking, BookingStatus, Payment, StatusActor } from '@/types/database';
 
 export class WorkflowError extends Error {}
 
@@ -465,28 +468,231 @@ export async function markDepositFailed(bookingId: string): Promise<void> {
   }
 }
 
-/** Admin manually records the remaining balance as paid (e.g. cash/EFT on arrival). Does not change status. */
-export async function markBalancePaid(bookingId: string, adminId: string): Promise<Booking> {
+/**
+ * Admin records a payment made outside the online flow — EFT, cash, card
+ * on arrival, etc. Always creates a `payments` row (provider: 'manual') so
+ * every payment, online or not, has the same audit trail: reference,
+ * amount, currency, date, status, type. This is what "Mark balance as
+ * paid" and "Record an EFT or manual payment" both reduce to.
+ */
+export async function recordManualPayment(
+  bookingId: string,
+  adminId: string,
+  input: {
+    type: 'deposit' | 'balance';
+    amount: number;
+    reference?: string;
+    note?: string;
+    proofOfPaymentUrl?: string;
+    paidAt?: string;
+  },
+): Promise<Booking> {
   const db = createAdminSupabaseClient();
   const booking = await getBookingOrThrow(db, bookingId);
-  assertStatus(booking, ['confirmed', 'checked_in', 'checked_out']);
 
-  const { data: updated, error } = await db
-    .from('bookings')
-    .update({
-      balance_paid_at: new Date().toISOString(),
-      balance_marked_paid_by: adminId,
+  if (input.type === 'deposit') {
+    assertStatus(booking, ['accepted_awaiting_deposit', 'deposit_processing']);
+  } else {
+    assertStatus(booking, ['confirmed', 'checked_in', 'checked_out']);
+    if (booking.balance_paid_at) {
+      throw new WorkflowError('The balance for this booking is already recorded as paid.');
+    }
+  }
+
+  const paidAt = input.paidAt ?? new Date().toISOString();
+
+  const { data: payment, error } = await db
+    .from('payments')
+    .insert({
+      booking_id: bookingId,
+      type: input.type,
+      provider: 'manual',
+      provider_reference: input.reference ?? null,
+      amount: input.amount,
+      status: 'paid',
+      paid_at: paidAt,
+      admin_note: input.note ?? null,
+      recorded_by: adminId,
+      proof_of_payment_url: input.proofOfPaymentUrl ?? null,
     })
-    .eq('id', bookingId)
     .select('*')
     .single();
 
-  if (error || !updated) {
-    throw new WorkflowError(`Could not record balance payment: ${error?.message}`);
+  if (error || !payment) {
+    throw new WorkflowError(`Could not record payment: ${error?.message}`);
   }
 
-  await recordHistory(db, bookingId, booking.status, booking.status, 'admin', 'Balance paid');
-  return updated;
+  await db.from('payment_events').insert({
+    booking_id: bookingId,
+    payment_id: payment.id,
+    event_type: 'manual_payment_recorded',
+    provider: 'manual',
+    actor: 'admin',
+    actor_id: adminId,
+    note: input.note ?? null,
+  });
+
+  let updatedBooking: Booking;
+  if (input.type === 'deposit') {
+    updatedBooking = await markDepositPaid(bookingId);
+  } else {
+    const { data: updated, error: balanceError } = await db
+      .from('bookings')
+      .update({ balance_paid_at: paidAt, balance_marked_paid_by: adminId })
+      .eq('id', bookingId)
+      .select('*')
+      .single();
+    if (balanceError || !updated) {
+      throw new WorkflowError(`Could not record balance payment: ${balanceError?.message}`);
+    }
+    await recordHistory(db, bookingId, booking.status, booking.status, 'admin', 'Balance paid (manual)');
+    updatedBooking = updated;
+  }
+
+  await sendReceiptEmail(updatedBooking, payment);
+  return updatedBooking;
+}
+
+/** Convenience one-click version of recordManualPayment for the common case: full balance, no reference/proof needed. */
+export async function markBalancePaid(bookingId: string, adminId: string): Promise<Booking> {
+  const db = createAdminSupabaseClient();
+  const booking = await getBookingOrThrow(db, bookingId);
+  return recordManualPayment(bookingId, adminId, { type: 'balance', amount: booking.balance_amount });
+}
+
+/**
+ * Admin issues/records a refund (full or partial) against a previously paid
+ * deposit or balance payment. This system doesn't call the payment
+ * provider's refund API directly (that requires broader API credentials
+ * most merchants don't grant by default) — the admin processes the refund
+ * with the provider directly and records it here, so the booking's
+ * financial record stays accurate and auditable either way.
+ */
+export async function issueRefund(
+  bookingId: string,
+  adminId: string,
+  input: { amount: number; sourcePaymentId?: string; reason?: string },
+): Promise<Booking> {
+  const db = createAdminSupabaseClient();
+  const booking = await getBookingOrThrow(db, bookingId);
+
+  if (input.amount <= 0) {
+    throw new WorkflowError('Refund amount must be greater than zero.');
+  }
+
+  const { data: refundPayment, error } = await db
+    .from('payments')
+    .insert({
+      booking_id: bookingId,
+      type: 'refund',
+      provider: 'manual',
+      amount: input.amount,
+      status: 'paid',
+      paid_at: new Date().toISOString(),
+      admin_note: input.reason ?? null,
+      recorded_by: adminId,
+    })
+    .select('*')
+    .single();
+
+  if (error || !refundPayment) {
+    throw new WorkflowError(`Could not record refund: ${error?.message}`);
+  }
+
+  if (input.sourcePaymentId) {
+    const { data: source } = await db
+      .from('payments')
+      .select('*')
+      .eq('id', input.sourcePaymentId)
+      .single();
+
+    if (source) {
+      const newRefundedAmount = Math.round((source.refunded_amount + input.amount) * 100) / 100;
+      const newStatus = newRefundedAmount >= source.amount ? 'refunded' : 'partially_refunded';
+      await db
+        .from('payments')
+        .update({ refunded_amount: newRefundedAmount, status: newStatus })
+        .eq('id', source.id);
+    }
+  }
+
+  await db.from('payment_events').insert({
+    booking_id: bookingId,
+    payment_id: refundPayment.id,
+    event_type: 'refund_recorded',
+    provider: 'manual',
+    actor: 'admin',
+    actor_id: adminId,
+    note: input.reason ?? null,
+  });
+
+  await recordHistory(
+    db,
+    bookingId,
+    booking.status,
+    booking.status,
+    'admin',
+    `Refund recorded: ${input.amount} ${booking.currency}${input.reason ? ` — ${input.reason}` : ''}`,
+  );
+
+  await sendRefundEmail(booking, refundPayment);
+  return booking;
+}
+
+/** Admin adds/edits an internal note on a payment record — never guest-facing. */
+export async function addPaymentNote(paymentId: string, adminId: string, note: string): Promise<Payment> {
+  const db = createAdminSupabaseClient();
+  const { data: payment, error } = await db
+    .from('payments')
+    .update({ admin_note: note })
+    .eq('id', paymentId)
+    .select('*')
+    .single();
+
+  if (error || !payment) {
+    throw new WorkflowError(`Could not save note: ${error?.message}`);
+  }
+
+  await db.from('payment_events').insert({
+    booking_id: payment.booking_id,
+    payment_id: paymentId,
+    event_type: 'note_added',
+    actor: 'admin',
+    actor_id: adminId,
+    note,
+  });
+
+  return payment;
+}
+
+/** Admin resends the deposit or balance payment link (same token, same amount). */
+export async function resendPaymentLink(
+  bookingId: string,
+  adminId: string,
+  type: 'deposit' | 'balance',
+): Promise<void> {
+  const db = createAdminSupabaseClient();
+  const booking = await getBookingOrThrow(db, bookingId);
+
+  if (type === 'deposit') {
+    assertStatus(booking, ['accepted_awaiting_deposit', 'deposit_processing']);
+  } else {
+    assertStatus(booking, ['confirmed', 'checked_in', 'checked_out']);
+    if (booking.balance_paid_at) {
+      throw new WorkflowError('The balance for this booking is already paid.');
+    }
+  }
+
+  const { url } = await createPaymentLink(booking, type);
+  await sendPaymentLinkResentEmail(booking, url, type);
+
+  await db.from('payment_events').insert({
+    booking_id: bookingId,
+    event_type: 'link_resent',
+    actor: 'admin',
+    actor_id: adminId,
+    note: `${type} link resent`,
+  });
 }
 
 /** Called by the payment webhook when a guest pays the balance online (self-serve). Does not change status. */

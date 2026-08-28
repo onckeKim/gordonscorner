@@ -14,8 +14,15 @@ export type BookingStatus =
   | 'checked_out'
   | 'no_show';
 
-export type PaymentType = 'deposit' | 'balance';
-export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'cancelled';
+export type PaymentType = 'deposit' | 'balance' | 'refund';
+export type PaymentStatus =
+  | 'pending'
+  | 'processing'
+  | 'paid'
+  | 'failed'
+  | 'cancelled'
+  | 'refunded'
+  | 'partially_refunded';
 export type StatusActor = 'guest' | 'admin' | 'system';
 
 export type Booking = {
@@ -98,8 +105,27 @@ export type Payment = {
   amount: number;
   status: PaymentStatus;
   raw_payload: Record<string, unknown> | null;
+  idempotency_key: string | null;
+  admin_note: string | null;
+  recorded_by: string | null;
+  proof_of_payment_url: string | null;
+  refunded_amount: number;
+  paid_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export type PaymentEvent = {
+  id: string;
+  booking_id: string | null;
+  payment_id: string | null;
+  event_type: string;
+  provider: string | null;
+  actor: StatusActor;
+  actor_id: string | null;
+  note: string | null;
+  raw_payload: Record<string, unknown> | null;
+  created_at: string;
 }
 
 export type Profile = {
@@ -143,6 +169,12 @@ export type Database = {
         Row: Payment;
         Insert: Partial<Payment> & Pick<Payment, 'booking_id' | 'type' | 'provider' | 'amount'>;
         Update: Partial<Payment>;
+        Relationships: [];
+      };
+      payment_events: {
+        Row: PaymentEvent;
+        Insert: Partial<PaymentEvent> & Pick<PaymentEvent, 'event_type'>;
+        Update: Partial<PaymentEvent>;
         Relationships: [];
       };
       profiles: {

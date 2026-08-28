@@ -171,6 +171,13 @@ export function BookingActions({ booking }: { booking: Booking }) {
           </p>
           <button
             disabled={busy}
+            onClick={() => run(() => callAction(`${base}/resend-deposit-link`))}
+            className="btn-secondary w-full"
+          >
+            Resend deposit link
+          </button>
+          <button
+            disabled={busy}
             onClick={() => run(() => callAction(`${base}/cancel`))}
             className="btn-secondary w-full"
           >

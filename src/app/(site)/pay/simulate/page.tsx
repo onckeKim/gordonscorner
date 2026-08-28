@@ -9,18 +9,23 @@ function SimulateContent() {
   const type = searchParams.get('type') ?? 'deposit';
   const amount = searchParams.get('amount') ?? '0';
   const returnUrl = searchParams.get('returnUrl') ?? '/';
+  const idempotencyKey = searchParams.get('idempotencyKey') ?? '';
   const [busy, setBusy] = useState(false);
 
-  async function simulate(outcome: 'paid' | 'failed') {
+  async function simulate(outcome: 'paid' | 'failed' | 'cancelled', redirect = true) {
     setBusy(true);
     await fetch('/api/payments/webhook', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bookingId, type, amount: Number(amount), outcome }),
+      body: JSON.stringify({ bookingId, type, amount: Number(amount), outcome, idempotencyKey }),
     });
-    const url = new URL(returnUrl);
-    url.searchParams.set('outcome', outcome === 'paid' ? 'success' : 'cancelled');
-    window.location.href = url.toString();
+    if (redirect) {
+      const url = new URL(returnUrl);
+      url.searchParams.set('outcome', outcome === 'paid' ? 'success' : 'cancelled');
+      window.location.href = url.toString();
+    } else {
+      setBusy(false);
+    }
   }
 
   return (
@@ -39,6 +44,16 @@ function SimulateContent() {
         </button>
         <button disabled={busy} onClick={() => simulate('failed')} className="btn-secondary">
           Simulate failed payment
+        </button>
+        <button disabled={busy} onClick={() => simulate('cancelled')} className="btn-secondary">
+          Simulate cancelled payment
+        </button>
+        <button
+          disabled={busy}
+          onClick={() => simulate('paid', false)}
+          className="text-xs text-corner-muted underline hover:text-corner-charcoal"
+        >
+          Resend the same webhook again (test duplicate handling)
         </button>
       </div>
     </div>

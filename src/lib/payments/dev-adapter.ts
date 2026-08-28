@@ -19,6 +19,7 @@ export const devPaymentProvider: PaymentProvider = {
     url.searchParams.set('type', params.type);
     url.searchParams.set('amount', params.amount.toFixed(2));
     url.searchParams.set('returnUrl', params.returnUrl);
+    url.searchParams.set('idempotencyKey', params.idempotencyKey);
     return { kind: 'redirect', url: url.toString() };
   },
 
@@ -27,15 +28,17 @@ export const devPaymentProvider: PaymentProvider = {
       bookingId: string;
       type: 'deposit' | 'balance';
       amount: number;
-      outcome: 'paid' | 'failed';
+      outcome: 'paid' | 'failed' | 'cancelled';
+      idempotencyKey?: string;
     };
     return {
       verified: true,
       bookingId: data.bookingId,
       paymentType: data.type,
       status: data.outcome,
-      providerReference: `DEV-${Date.now()}`,
+      providerReference: `DEV-${data.idempotencyKey ?? Date.now()}`,
       amount: data.amount,
+      idempotencyKey: data.idempotencyKey ?? null,
       raw: data,
     };
   },

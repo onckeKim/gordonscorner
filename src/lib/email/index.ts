@@ -4,7 +4,7 @@ import { sendViaResend } from './resend';
 import { sendViaDevAdapter } from './dev-adapter';
 import * as templates from './templates';
 import type { EmailContent } from './templates';
-import type { Booking } from '@/types/database';
+import type { Booking, Payment } from '@/types/database';
 
 /** Internal inbox that receives admin notifications — server-only, not the public contact email. */
 function adminNotificationEmail(): string {
@@ -64,4 +64,20 @@ export async function sendBalancePaymentLinkEmail(booking: Booking, paymentUrl: 
 
 export async function sendEnquiryEmail(enquiry: { name: string; email: string; message: string }) {
   await send(adminNotificationEmail(), templates.enquiryEmail(enquiry));
+}
+
+export async function sendReceiptEmail(booking: Booking, payment: Payment) {
+  await send(booking.guest_email, templates.receiptEmail(booking, payment));
+}
+
+export async function sendRefundEmail(booking: Booking, payment: Payment) {
+  await send(booking.guest_email, templates.refundEmail(booking, payment));
+}
+
+export async function sendPaymentLinkResentEmail(
+  booking: Booking,
+  paymentUrl: string,
+  type: 'deposit' | 'balance',
+) {
+  await send(booking.guest_email, templates.paymentLinkResentEmail(booking, paymentUrl, type));
 }

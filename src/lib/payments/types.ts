@@ -12,6 +12,9 @@ export interface CheckoutParams {
   returnUrl: string;
   cancelUrl: string;
   notifyUrl: string;
+  /** Unique per payment attempt — passed to the provider so each retry is
+   * distinguishable, and echoed back in the webhook for exact-attempt tracing. */
+  idempotencyKey: string;
 }
 
 export interface WebhookEvent {
@@ -22,6 +25,8 @@ export interface WebhookEvent {
   status: 'paid' | 'failed' | 'cancelled';
   providerReference: string | null;
   amount: number | null;
+  /** Echoed back from CheckoutParams.idempotencyKey when the provider preserves custom fields. */
+  idempotencyKey: string | null;
   raw: Record<string, unknown>;
 }
 

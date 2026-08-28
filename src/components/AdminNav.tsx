@@ -18,6 +18,7 @@ export function AdminNav() {
   const links = [
     { href: '/admin/dashboard', label: 'Bookings' },
     { href: '/admin/calendar', label: 'Calendar' },
+    { href: '/admin/payments', label: 'Payments' },
   ];
 
   return (
