@@ -1,7 +1,12 @@
+import type { Metadata } from 'next';
 import { BookingForm } from '@/components/BookingForm';
-import { bookingRules } from '@/lib/config';
+import { bookingRules, siteConfig } from '@/lib/config';
 
-export const metadata = { title: 'Check availability — Gordon’s Corner' };
+export const metadata: Metadata = {
+  title: 'Check availability & book',
+  description: `Check availability and request your stay at ${siteConfig.propertyName}. Minimum ${bookingRules.minNights}-night stay, secured with a ${Math.round(bookingRules.depositRate * 100)}% deposit.`,
+  alternates: { canonical: '/book' },
+};
 
 export default function BookPage() {
   return (

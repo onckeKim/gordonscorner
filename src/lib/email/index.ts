@@ -199,3 +199,12 @@ export async function sendPaymentLinkResentEmail(booking: Booking, paymentUrl: s
 export async function sendEnquiryEmail(enquiry: { name: string; email: string; message: string }) {
   await send(adminNotificationEmail(), templates.enquiryEmail(enquiry), { emailType: 'enquiry' });
 }
+
+export async function sendPrivacyRequestEmail(request: {
+  requestType: 'export' | 'correction' | 'deletion';
+  name: string;
+  email: string;
+  details?: string;
+}) {
+  await send(adminNotificationEmail(), templates.privacyRequestEmail(request), { emailType: 'privacy_request' });
+}

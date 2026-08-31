@@ -86,7 +86,11 @@ function getNightlyRate(dateIso: string, inputs: Required<Omit<PricingInputs, 'd
 export function calculateStayPricing(checkIn: string, checkOut: string, overrides?: PricingInputs): StayPricing {
   const inputs = {
     standardNightlyRate: overrides?.standardNightlyRate ?? pricingConfig.standardNightlyRateZar,
-    weekendNightlyRate: overrides?.weekendNightlyRate ?? pricingConfig.weekendNightlyRateZar,
+    // `null` is a meaningful, distinct value here (admin explicitly disabled
+    // the weekend rate) — only a genuinely *missing* key should fall back to
+    // the static config default, so this can't use `??` like the others.
+    weekendNightlyRate:
+      overrides?.weekendNightlyRate !== undefined ? overrides.weekendNightlyRate : pricingConfig.weekendNightlyRateZar,
     cleaningFee: overrides?.cleaningFee ?? pricingConfig.cleaningFeeZar,
     serviceFee: overrides?.serviceFee ?? pricingConfig.serviceFeeZar,
     discount: overrides?.discount ?? pricingConfig.discountZar,

@@ -2,16 +2,13 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { getLockoutStatus, recordLoginAttempt, LOCKOUT_WINDOW_MINUTES } from '@/lib/auth/lockout';
-import { handleApiError } from '@/lib/api-response';
+import { checkIpRateLimit, clientIp } from '@/lib/rate-limit';
+import { handleApiError, RateLimitError } from '@/lib/api-response';
 
 const loginSchema = z.object({
   email: z.string().trim().email(),
   password: z.string().min(1),
 });
-
-function clientIp(request: NextRequest): string | null {
-  return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null;
-}
 
 /**
  * Server-side login so repeated-failed-sign-in lockout can be enforced
@@ -24,6 +21,12 @@ export async function POST(request: NextRequest) {
   try {
     const { email, password } = loginSchema.parse(await request.json());
     const ip = clientIp(request);
+
+    // Per-IP throttle, independent of the per-email lockout below — catches
+    // an attacker spraying many different email addresses from one source.
+    if (!(await checkIpRateLimit(request, 'admin-login', 20, 15 * 60))) {
+      throw new RateLimitError('Too many sign-in attempts from this connection. Please try again later.');
+    }
 
     const lockout = await getLockoutStatus(email);
     if (lockout.locked) {

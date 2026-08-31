@@ -15,6 +15,8 @@ export function EnquiryForm({ className, idPrefix = 'enquiry' }: EnquiryFormProp
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
+  const [website, setWebsite] = useState(''); // honeypot — left blank by real visitors
+  const [formRenderedAt] = useState(() => Date.now());
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -25,7 +27,7 @@ export function EnquiryForm({ className, idPrefix = 'enquiry' }: EnquiryFormProp
       const res = await fetch('/api/enquiries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, message }),
+        body: JSON.stringify({ name, email, message, website, formRenderedAt }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -58,6 +60,18 @@ export function EnquiryForm({ className, idPrefix = 'enquiry' }: EnquiryFormProp
         {status === 'error' && (
           <Alert variant="error" title="Couldn't send your message" description={errorMessage} />
         )}
+        {/* Honeypot — hidden from sighted users and screen readers, but visible to bots that fill in every field. */}
+        <div aria-hidden="true" style={{ position: 'absolute', left: '-9999px', width: 1, height: 1, overflow: 'hidden' }}>
+          <label htmlFor={`${idPrefix}-website`}>Website</label>
+          <input
+            id={`${idPrefix}-website`}
+            name="website"
+            tabIndex={-1}
+            autoComplete="off"
+            value={website}
+            onChange={(e) => setWebsite(e.target.value)}
+          />
+        </div>
         <div>
           <label className="label" htmlFor={`${idPrefix}-name`}>
             Name

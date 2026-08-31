@@ -15,7 +15,12 @@ const fieldsSchema = z.object({
 });
 
 const MAX_PROOF_BYTES = 10 * 1024 * 1024; // 10MB
-const ALLOWED_PROOF_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
+const ALLOWED_PROOF_TYPES: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'application/pdf': 'pdf',
+};
 
 /** Admin: record an EFT/manual payment, optionally with a proof-of-payment upload. */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -40,12 +45,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (proofFile.size > MAX_PROOF_BYTES) {
         throw new WorkflowError('Proof of payment file is too large (10MB max).');
       }
-      if (!ALLOWED_PROOF_TYPES.has(proofFile.type)) {
+      // Trust only the extension mapped from the validated MIME type — never
+      // the attacker-controlled original filename.
+      const safeExtension = ALLOWED_PROOF_TYPES[proofFile.type];
+      if (!safeExtension) {
         throw new WorkflowError('Proof of payment must be a JPEG, PNG, WebP, or PDF file.');
       }
 
-      const extension = proofFile.name.split('.').pop() ?? 'bin';
-      const path = `${id}/${randomUUID()}.${extension}`;
+      const path = `${id}/${randomUUID()}.${safeExtension}`;
       const bytes = await proofFile.arrayBuffer();
 
       const { error: uploadError } = await db.storage
@@ -53,7 +60,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         .upload(path, bytes, { contentType: proofFile.type, upsert: false });
 
       if (uploadError) {
-        throw new WorkflowError(`Could not upload proof of payment: ${uploadError.message}`);
+        console.error('Proof of payment upload failed:', uploadError);
+        throw new WorkflowError('Could not upload proof of payment. Please try again.');
       }
       proofOfPaymentUrl = path;
     }

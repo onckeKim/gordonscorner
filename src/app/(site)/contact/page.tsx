@@ -12,7 +12,11 @@ import {
   type SocialContentSection,
 } from '@/lib/content/sections';
 
-export const metadata: Metadata = { title: `Contact — ${siteConfig.propertyName}` };
+export const metadata: Metadata = {
+  title: 'Contact',
+  description: `Get in touch with ${siteConfig.propertyName} in ${siteConfig.address} — phone, email, WhatsApp, or send us a message directly.`,
+  alternates: { canonical: '/contact' },
+};
 
 export default async function ContactPage() {
   const [site, contact, social] = await Promise.all([

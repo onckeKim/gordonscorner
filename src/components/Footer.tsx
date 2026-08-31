@@ -15,6 +15,7 @@ const POLICY_LINKS = [
   { href: '/policies#cancellation', label: 'Cancellation policy' },
   { href: '/policies#house-rules', label: 'House rules' },
   { href: '/policies#privacy', label: 'Privacy' },
+  { href: '/privacy-request', label: 'Request your data' },
   { href: '/contact', label: 'Contact us' },
   { href: '/booking/lookup', label: 'Find my booking' },
 ];

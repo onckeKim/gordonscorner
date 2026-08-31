@@ -16,6 +16,16 @@ const LAST_SEEN_COOKIE = 'admin_last_seen';
 
 const PUBLIC_ADMIN_PATHS = ['/admin/login', '/admin/forgot-password', '/admin/reset-password'];
 
+/** See the identical helper + rationale in src/lib/supabase/server.ts — httpOnly is deliberately left to the library, not forced. */
+function hardenCookieOptions(options: CookieOptions): CookieOptions {
+  return {
+    ...options,
+    sameSite: options.sameSite ?? 'lax',
+    secure: options.secure ?? process.env.NODE_ENV === 'production',
+    path: options.path ?? '/',
+  };
+}
+
 export async function middleware(request: NextRequest) {
   const response = NextResponse.next({ request });
 
@@ -29,7 +39,9 @@ export async function middleware(request: NextRequest) {
         },
         setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, hardenCookieOptions(options)),
+          );
         },
       },
     },

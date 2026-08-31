@@ -128,6 +128,8 @@ export function BookingForm() {
   const [cancellationPolicyAgreed, setCancellationPolicyAgreed] = useState(false);
   const [privacyPolicyAgreed, setPrivacyPolicyAgreed] = useState(false);
   const [communicationConsent, setCommunicationConsent] = useState(false);
+  const [website, setWebsite] = useState(''); // honeypot — left blank by real visitors
+  const [formRenderedAt] = useState(() => Date.now());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -190,6 +192,8 @@ export function BookingForm() {
           privacyPolicyAgreed,
           communicationConsent,
           policyVersion: POLICY_VERSION,
+          website,
+          formRenderedAt,
         }),
       });
 
@@ -242,6 +246,12 @@ export function BookingForm() {
             currency={pricing.currency}
           />
         )}
+
+        {/* Honeypot — hidden from sighted users and screen readers, but visible to bots that fill in every field. */}
+        <div aria-hidden="true" style={{ position: 'absolute', left: '-9999px', width: 1, height: 1, overflow: 'hidden' }}>
+          <label htmlFor="bf-website">Website</label>
+          <input id="bf-website" name="website" tabIndex={-1} autoComplete="off" value={website} onChange={(e) => setWebsite(e.target.value)} />
+        </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>

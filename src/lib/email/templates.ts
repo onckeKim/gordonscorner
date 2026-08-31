@@ -43,6 +43,22 @@ function formatZar(amount: number, currency = 'ZAR'): string {
   return new Intl.NumberFormat('en-ZA', { style: 'currency', currency }).format(amount);
 }
 
+/**
+ * Escapes user-supplied text before it's interpolated into an HTML email
+ * body. Every guest-controlled field (name, message, enquiry text, ...) and
+ * every admin-typed free-text field (decline reason, note, ...) must be
+ * passed through this before landing in a template string below — none of
+ * this file uses a templating engine that escapes automatically.
+ */
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function statusLabel(status: Booking['status']): string {
   return status
     .split('_')
@@ -179,7 +195,7 @@ function nextSteps(items: string[]): string {
 export function bookingReceivedEmail(booking: Booking): EmailContent {
   return buildEmail(
     `We've received your booking request — ${siteConfig.propertyName}`,
-    `Thank you, ${booking.guest_name}`,
+    `Thank you, ${escapeHtml(booking.guest_name)}`,
     `<p>We've received your booking request and will review it shortly. You'll hear from us within 24 hours.</p>
      ${bookingSummary(booking)}
      ${viewBookingLink(booking)}`,
@@ -191,11 +207,11 @@ export function bookingReceivedEmail(booking: Booking): EmailContent {
 // ---------------------------------------------------------------------------
 export function adminNewRequestEmail(booking: Booking): EmailContent {
   return buildEmail(
-    `New booking request from ${booking.guest_name}`,
+    `New booking request from ${escapeHtml(booking.guest_name)}`,
     'New booking request',
-    `<p>${booking.guest_name} (${booking.guest_email}${booking.guest_phone ? `, ${booking.guest_phone}` : ''}) requested a stay.</p>
+    `<p>${escapeHtml(booking.guest_name)} (${escapeHtml(booking.guest_email)}${booking.guest_phone ? `, ${escapeHtml(booking.guest_phone)}` : ''}) requested a stay.</p>
      ${bookingSummary(booking)}
-     ${booking.message ? `<p><em>${booking.message}</em></p>` : ''}
+     ${booking.message ? `<p><em>${escapeHtml(booking.message)}</em></p>` : ''}
      ${ctaButton(`${siteConfig.siteUrl}/admin/bookings/${booking.id}`, 'Review request')}`,
   );
 }
@@ -207,7 +223,7 @@ export function infoRequestedEmail(booking: Booking, message: string): EmailCont
   return buildEmail(
     'A quick question about your booking request',
     'We need a little more information',
-    `<p>${message}</p>${bookingSummary(booking)}${viewBookingLink(booking)}`,
+    `<p>${escapeHtml(message)}</p>${bookingSummary(booking)}${viewBookingLink(booking)}`,
   );
 }
 
@@ -235,7 +251,7 @@ export function datesProposedEmail(booking: Booking): EmailContent {
 export function bookingAcceptedEmail(booking: Booking): EmailContent {
   return buildEmail(
     'Your booking request has been accepted',
-    `Good news, ${booking.guest_name}!`,
+    `Good news, ${escapeHtml(booking.guest_name)}!`,
     `<p>Your request for ${formatDate(booking.check_in)} &rarr; ${formatDate(booking.check_out)} has been accepted. We'll follow up with a secure link to pay your deposit and confirm your dates.</p>
      ${bookingSummary(booking)}
      ${viewBookingLink(booking)}`,
@@ -265,7 +281,7 @@ export function depositLinkEmail(booking: Booking, paymentUrl: string): EmailCon
 export function depositReminderEmail(booking: Booking, paymentUrl: string): EmailContent {
   return buildEmail(
     'Reminder — your deposit is still outstanding',
-    `Don't lose your dates, ${booking.guest_name}`,
+    `Don't lose your dates, ${escapeHtml(booking.guest_name)}`,
     `<p>We haven't received your deposit yet for ${formatDate(booking.check_in)} &rarr; ${formatDate(booking.check_out)}. Your dates are only held temporarily${booking.hold_expires_at ? ` — until ${formatDateTime(booking.hold_expires_at)}` : ''}.</p>
      <p>Outstanding deposit: <strong>${formatZar(booking.deposit_amount, booking.currency)}</strong></p>
      ${ctaButton(paymentUrl, 'Pay deposit now')}`,
@@ -306,7 +322,7 @@ export function paymentFailedEmail(booking: Booking, paymentUrl: string, type: '
   return buildEmail(
     'Payment unsuccessful',
     'Your payment didn’t go through',
-    `<p>Your ${type} payment of <strong>${formatZar(amount, booking.currency)}</strong> for ${booking.reference ?? 'your booking'} wasn't successful — this can happen for a number of reasons (card declined, session timed out, or the payment was cancelled).</p>
+    `<p>Your ${type} payment of <strong>${formatZar(amount, booking.currency)}</strong> for ${escapeHtml(booking.reference ?? 'your booking')} wasn't successful — this can happen for a number of reasons (card declined, session timed out, or the payment was cancelled).</p>
      <p>No amount has been charged. Your dates are still held${booking.hold_expires_at ? ` until ${formatDateTime(booking.hold_expires_at)}` : ''} — please try again.</p>
      ${ctaButton(paymentUrl, 'Try payment again')}`,
   );
@@ -319,7 +335,7 @@ export function receiptEmail(booking: Booking, payment: Payment): EmailContent {
   const paidAt = payment.paid_at ?? payment.created_at;
   const label = payment.type === 'deposit' ? 'deposit' : 'balance';
   return buildEmail(
-    `Receipt — ${label} payment received (${booking.reference ?? booking.id.slice(0, 8)})`,
+    `Receipt — ${label} payment received (${escapeHtml(booking.reference ?? booking.id.slice(0, 8))})`,
     'Payment receipt',
     `<p>Thank you — we've received your ${label} payment.</p>
      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin:16px 0;">
@@ -327,8 +343,8 @@ export function receiptEmail(booking: Booking, payment: Payment): EmailContent {
        <tr><td style="padding:4px 0;color:#6F6A63;">Currency</td><td style="padding:4px 0;text-align:right;">${booking.currency}</td></tr>
        <tr><td style="padding:4px 0;color:#6F6A63;">Date</td><td style="padding:4px 0;text-align:right;">${formatDate(paidAt)}</td></tr>
        <tr><td style="padding:4px 0;color:#6F6A63;">Payment method</td><td style="padding:4px 0;text-align:right;text-transform:capitalize;">${payment.provider}</td></tr>
-       <tr><td style="padding:4px 0;color:#6F6A63;">Reference</td><td style="padding:4px 0;text-align:right;">${payment.provider_reference ?? payment.id.slice(0, 8)}</td></tr>
-       ${booking.reference ? `<tr><td style="padding:4px 0;color:#6F6A63;">Booking reference</td><td style="padding:4px 0;text-align:right;">${booking.reference}</td></tr>` : ''}
+       <tr><td style="padding:4px 0;color:#6F6A63;">Reference</td><td style="padding:4px 0;text-align:right;">${escapeHtml(payment.provider_reference ?? payment.id.slice(0, 8))}</td></tr>
+       ${booking.reference ? `<tr><td style="padding:4px 0;color:#6F6A63;">Booking reference</td><td style="padding:4px 0;text-align:right;">${escapeHtml(booking.reference)}</td></tr>` : ''}
      </table>
      ${bookingSummary(booking)}
      ${viewBookingLink(booking)}`,
@@ -343,9 +359,9 @@ export function bookingConfirmedEmail(booking: Booking, balanceDueDate?: string)
     booking.total_amount > 0 ? Math.round((booking.deposit_amount / booking.total_amount) * 100) : 50;
   return buildEmail(
     `Booking confirmed — ${booking.reference}`,
-    `You're confirmed, ${booking.guest_name}!`,
+    `You're confirmed, ${escapeHtml(booking.guest_name)}!`,
     `<p>Your deposit has been received and your stay is confirmed.</p>
-     <p style="font-size:18px;letter-spacing:0.06em;"><strong>${booking.reference}</strong></p>
+     <p style="font-size:18px;letter-spacing:0.06em;"><strong>${escapeHtml(booking.reference ?? '')}</strong></p>
      ${bookingSummary(booking)}
      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin:8px 0 16px;">
        <tr><td style="padding:4px 0;color:#6F6A63;">Deposit paid (${depositPercent}%)</td><td style="padding:4px 0;text-align:right;">${formatZar(booking.deposit_amount, booking.currency)}</td></tr>
@@ -374,7 +390,7 @@ export function adminConfirmedEmail(booking: Booking): EmailContent {
   return buildEmail(
     `Deposit paid — ${booking.reference} confirmed`,
     'Booking confirmed',
-    `<p>${booking.guest_name} paid their deposit. Booking ${booking.reference} is now confirmed.</p>${bookingSummary(booking)}`,
+    `<p>${escapeHtml(booking.guest_name)} paid their deposit. Booking ${escapeHtml(booking.reference ?? '')} is now confirmed.</p>${bookingSummary(booking)}`,
   );
 }
 
@@ -385,7 +401,7 @@ export function declinedEmail(booking: Booking): EmailContent {
   return buildEmail(
     'Update on your booking request',
     'About your request',
-    `<p>Unfortunately we're unable to accommodate this request.${booking.decline_reason ? ` ${booking.decline_reason}` : ''}</p>
+    `<p>Unfortunately we're unable to accommodate this request.${booking.decline_reason ? ` ${escapeHtml(booking.decline_reason)}` : ''}</p>
      ${bookingSummary(booking)}
      <p>We'd love to help with different dates — <a href="${siteConfig.siteUrl}/book" style="color:#B4852D;">submit a new request</a> any time.</p>`,
   );
@@ -396,9 +412,9 @@ export function declinedEmail(booking: Booking): EmailContent {
 // ---------------------------------------------------------------------------
 export function bookingCancelledEmail(booking: Booking): EmailContent {
   return buildEmail(
-    `Booking cancelled — ${booking.reference ?? booking.id.slice(0, 8)}`,
+    `Booking cancelled — ${escapeHtml(booking.reference ?? booking.id.slice(0, 8))}`,
     'Your booking has been cancelled',
-    `<p>Your booking for ${formatDate(booking.check_in)} &rarr; ${formatDate(booking.check_out)} has been cancelled.${booking.decline_reason ? ` ${booking.decline_reason}` : ''}</p>
+    `<p>Your booking for ${formatDate(booking.check_in)} &rarr; ${formatDate(booking.check_out)} has been cancelled.${booking.decline_reason ? ` ${escapeHtml(booking.decline_reason)}` : ''}</p>
      ${bookingSummary(booking)}
      <p>If a deposit or balance was paid and a refund applies, it will be processed per our <a href="${policiesUrl('cancellation')}" style="color:#B4852D;">cancellation policy</a> — you'll receive a separate email once it's issued.</p>
      <p>Questions? Contact us at ${siteConfig.contactEmail} or ${siteConfig.contactPhone}.</p>`,
@@ -410,13 +426,13 @@ export function bookingCancelledEmail(booking: Booking): EmailContent {
 // ---------------------------------------------------------------------------
 export function refundEmail(booking: Booking, payment: Payment): EmailContent {
   return buildEmail(
-    `Refund processed — ${booking.reference ?? booking.id.slice(0, 8)}`,
+    `Refund processed — ${escapeHtml(booking.reference ?? booking.id.slice(0, 8))}`,
     'Refund confirmation',
     `<p>A refund has been recorded for your booking.</p>
      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin:16px 0;">
        <tr><td style="padding:4px 0;color:#6F6A63;">Amount refunded</td><td style="padding:4px 0;text-align:right;"><strong>${formatZar(payment.amount, booking.currency)}</strong></td></tr>
        <tr><td style="padding:4px 0;color:#6F6A63;">Date</td><td style="padding:4px 0;text-align:right;">${formatDate(payment.paid_at ?? payment.created_at)}</td></tr>
-       ${payment.admin_note ? `<tr><td style="padding:4px 0;color:#6F6A63;">Note</td><td style="padding:4px 0;text-align:right;">${payment.admin_note}</td></tr>` : ''}
+       ${payment.admin_note ? `<tr><td style="padding:4px 0;color:#6F6A63;">Note</td><td style="padding:4px 0;text-align:right;">${escapeHtml(payment.admin_note)}</td></tr>` : ''}
      </table>
      <p>Refunds are typically returned to your original payment method within 5&ndash;7 business days.</p>`,
   );
@@ -458,7 +474,7 @@ export function balancePaymentLinkEmail(booking: Booking, paymentUrl: string): E
 export function preArrivalEmail(booking: Booking): EmailContent {
   return buildEmail(
     `Getting ready for your stay — ${formatDate(booking.check_in)}`,
-    `Almost time, ${booking.guest_name}!`,
+    `Almost time, ${escapeHtml(booking.guest_name)}!`,
     `<p>Your stay is coming up:</p>
      ${bookingSummary(booking)}
      ${nextSteps([
@@ -511,7 +527,7 @@ export function checkOutReminderEmail(booking: Booking): EmailContent {
 // ---------------------------------------------------------------------------
 export function postStayThankYouEmail(booking: Booking): EmailContent {
   return buildEmail(
-    `Thank you for staying with us, ${booking.guest_name}`,
+    `Thank you for staying with us, ${escapeHtml(booking.guest_name)}`,
     'It was a pleasure hosting you',
     `<p>Thank you for choosing ${siteConfig.propertyName} for your recent stay. We hope you left feeling rested and looked after.</p>
      <p>If anything wasn't quite right, please reply to this email directly — we read every message personally.</p>
@@ -538,7 +554,7 @@ export function reviewRequestEmail(booking: Booking): EmailContent {
 export function paymentLinkResentEmail(booking: Booking, paymentUrl: string, type: 'deposit' | 'balance'): EmailContent {
   const amount = type === 'deposit' ? booking.deposit_amount : booking.balance_amount;
   return buildEmail(
-    `Your payment link — ${booking.reference ?? booking.id.slice(0, 8)}`,
+    `Your payment link — ${escapeHtml(booking.reference ?? booking.id.slice(0, 8))}`,
     'Here’s your payment link again',
     `<p>As requested, here's a fresh link to pay your ${type === 'deposit' ? 'deposit' : 'remaining balance'} of <strong>${formatZar(amount, booking.currency)}</strong>.</p>
      ${ctaButton(paymentUrl, 'Pay securely')}`,
@@ -547,10 +563,29 @@ export function paymentLinkResentEmail(booking: Booking, paymentUrl: string, typ
 
 export function enquiryEmail(enquiry: { name: string; email: string; message: string }): EmailContent {
   return buildEmail(
-    `New enquiry from ${enquiry.name}`,
+    `New enquiry from ${escapeHtml(enquiry.name)}`,
     'New enquiry',
-    `<p><strong>${enquiry.name}</strong> (${enquiry.email}) sent a message via the website:</p>
-     <p style="white-space:pre-wrap;background:#F5F2ED;border-radius:8px;padding:14px 16px;">${enquiry.message}</p>
-     <p><a href="mailto:${enquiry.email}" style="color:#B4852D;">Reply to ${enquiry.name}</a></p>`,
+    `<p><strong>${escapeHtml(enquiry.name)}</strong> (${escapeHtml(enquiry.email)}) sent a message via the website:</p>
+     <p style="white-space:pre-wrap;background:#F5F2ED;border-radius:8px;padding:14px 16px;">${escapeHtml(enquiry.message)}</p>
+     <p><a href="mailto:${encodeURIComponent(enquiry.email)}" style="color:#B4852D;">Reply to ${escapeHtml(enquiry.name)}</a></p>`,
+  );
+}
+
+export function privacyRequestEmail(request: {
+  requestType: 'export' | 'correction' | 'deletion';
+  name: string;
+  email: string;
+  details?: string;
+}): EmailContent {
+  const typeLabel = { export: 'Data export', correction: 'Data correction', deletion: 'Data deletion' }[request.requestType];
+  return buildEmail(
+    `Privacy request: ${typeLabel} — ${escapeHtml(request.name)}`,
+    'New privacy request',
+    `<p>A guest submitted a <strong>${typeLabel.toLowerCase()}</strong> request via the website.</p>
+     <p><strong>Name:</strong> ${escapeHtml(request.name)}<br/>
+        <strong>Email:</strong> ${escapeHtml(request.email)}</p>
+     ${request.details ? `<p style="white-space:pre-wrap;background:#F5F2ED;border-radius:8px;padding:14px 16px;">${escapeHtml(request.details)}</p>` : ''}
+     <p>Review and action this request from the admin portal's Privacy requests page.</p>
+     <p><a href="mailto:${encodeURIComponent(request.email)}" style="color:#B4852D;">Reply to ${escapeHtml(request.name)}</a></p>`,
   );
 }

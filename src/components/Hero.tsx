@@ -53,7 +53,14 @@ export function Hero({
 
         <div className="relative aspect-[4/5] overflow-hidden rounded-xl2 shadow-soft-lg sm:aspect-[6/5]">
           {imageSrc ? (
-            <Image src={imageSrc} alt={imageAlt} fill className="object-cover" priority />
+            <Image
+              src={imageSrc}
+              alt={imageAlt}
+              fill
+              className="object-cover"
+              priority
+              sizes="(min-width: 1024px) 50vw, 100vw"
+            />
           ) : (
             <div
               role="img"

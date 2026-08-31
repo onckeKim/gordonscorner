@@ -5,7 +5,11 @@ import { galleryContentDefaults } from '@/lib/content/sections';
 import type { GalleryPhoto } from '@/lib/content/gallery';
 import { siteConfig } from '@/lib/config';
 
-export const metadata: Metadata = { title: `Gallery — ${siteConfig.propertyName}` };
+export const metadata: Metadata = {
+  title: 'Gallery',
+  description: `Photos of ${siteConfig.propertyName} — interiors, exteriors, and the surrounding area in ${siteConfig.address}.`,
+  alternates: { canonical: '/gallery' },
+};
 
 export default async function GalleryPage() {
   const galleryPhotos = await getContentSection<GalleryPhoto[]>('gallery', galleryContentDefaults);

@@ -23,6 +23,7 @@ export function AdminNav() {
     { href: '/admin/content', label: 'Content' },
     { href: '/admin/settings', label: 'Settings' },
     { href: '/admin/audit-log', label: 'Audit log' },
+    { href: '/admin/privacy-requests', label: 'Privacy requests' },
     { href: '/admin/security', label: 'Security' },
   ];
 

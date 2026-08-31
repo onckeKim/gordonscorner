@@ -11,6 +11,7 @@ const RECORD_TYPES = [
   'rate_override',
   'blocked_date',
   'profile',
+  'privacy_request',
 ] as const;
 
 function formatDateTime(iso: string): string {

@@ -9,7 +9,11 @@ import {
   type PropertyContentSection,
 } from '@/lib/content/sections';
 
-export const metadata: Metadata = { title: `About — ${siteConfig.propertyName}` };
+export const metadata: Metadata = {
+  title: 'About',
+  description: `The story behind ${siteConfig.propertyName}, a boutique self-catering retreat in ${siteConfig.address}.`,
+  alternates: { canonical: '/about' },
+};
 
 export default async function AboutPage() {
   const [about, property] = await Promise.all([

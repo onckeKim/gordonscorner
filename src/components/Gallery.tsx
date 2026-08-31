@@ -5,11 +5,17 @@ export interface GalleryImage {
   alt: string;
 }
 
-function GalleryTile({ src, alt, className }: GalleryImage & { className?: string }) {
+function GalleryTile({ src, alt, className, sizes }: GalleryImage & { className?: string; sizes: string }) {
   return (
     <div className={`relative overflow-hidden rounded-xl2 ${className ?? ''}`}>
       {src ? (
-        <Image src={src} alt={alt} fill className="object-cover transition-transform duration-300 hover:scale-105 motion-reduce:transition-none motion-reduce:hover:scale-100" />
+        <Image
+          src={src}
+          alt={alt}
+          fill
+          sizes={sizes}
+          className="object-cover transition-transform duration-300 hover:scale-105 motion-reduce:transition-none motion-reduce:hover:scale-100"
+        />
       ) : (
         <div
           role="img"
@@ -33,6 +39,7 @@ export function Gallery({ images }: { images: GalleryImage[] }) {
           key={image.alt}
           {...image}
           className={i === 0 ? 'col-span-2 row-span-2 aspect-square sm:aspect-auto' : 'aspect-square'}
+          sizes={i === 0 ? '(min-width: 640px) 50vw, 100vw' : '(min-width: 640px) 25vw, 50vw'}
         />
       ))}
     </div>

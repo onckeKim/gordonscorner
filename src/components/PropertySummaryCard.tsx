@@ -20,7 +20,7 @@ export function PropertySummaryCard({ imageSrc, imageAlt, className }: PropertyS
     <div className={`overflow-hidden rounded-xl2 border border-corner-stone bg-corner-white shadow-soft ${className ?? ''}`}>
       <div className="relative aspect-[4/3]">
         {imageSrc ? (
-          <Image src={imageSrc} alt={imageAlt} fill className="object-cover" />
+          <Image src={imageSrc} alt={imageAlt} fill className="object-cover" sizes="(min-width: 1024px) 40vw, 100vw" />
         ) : (
           <div
             role="img"

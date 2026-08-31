@@ -17,7 +17,11 @@ import {
 } from '@/lib/content/sections';
 import type { GalleryPhoto } from '@/lib/content/gallery';
 
-export const metadata: Metadata = { title: `Accommodation — ${siteConfig.propertyName}` };
+export const metadata: Metadata = {
+  title: 'Accommodation',
+  description: `${propertyDetails.bedrooms}-bedroom, ${propertyDetails.bathrooms}-bathroom self-catering accommodation sleeping up to ${propertyDetails.maxGuests} guests in ${siteConfig.address}. View amenities, photos and availability.`,
+  alternates: { canonical: '/accommodation' },
+};
 
 const CAPACITY_STATS = [
   { icon: Users, label: 'Guests', value: `Up to ${propertyDetails.maxGuests}` },

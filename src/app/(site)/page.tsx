@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { MapPin, Info } from 'lucide-react';
 import { Hero } from '@/components/Hero';
@@ -10,6 +11,7 @@ import { Newsletter } from '@/components/Newsletter';
 import { Alert } from '@/components/ui/Alert';
 import { ButtonLink } from '@/components/ui/Button';
 import { siteConfig, bookingRules, propertyDetails, pricingConfig } from '@/lib/config';
+import { defaultMetaDescription } from '@/lib/seo';
 import { getContentSection } from '@/lib/content/store';
 import {
   siteContentDefaults,
@@ -30,6 +32,15 @@ import { homeFaqIds, type FaqGroup } from '@/lib/content/faq';
 function formatZar(amount: number): string {
   return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount);
 }
+
+export const metadata: Metadata = {
+  // Root layout supplies the full site name in the title template's
+  // suffix — the homepage uses `default` from the layout directly, so no
+  // title override is needed here. A dedicated description and canonical
+  // are still worth setting explicitly rather than inheriting.
+  description: defaultMetaDescription,
+  alternates: { canonical: '/' },
+};
 
 export default async function HomePage() {
   const [site, property, galleryPhotos, testimonials, faqGroups, amenities] = await Promise.all([

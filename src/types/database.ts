@@ -254,6 +254,23 @@ export type EmailLogEntry = {
   sent_at: string;
 }
 
+export type PrivacyRequestType = 'export' | 'correction' | 'deletion';
+export type PrivacyRequestStatus = 'new' | 'in_progress' | 'completed' | 'rejected';
+
+export type PrivacyRequest = {
+  id: string;
+  request_type: PrivacyRequestType;
+  name: string;
+  email: string;
+  details: string | null;
+  status: PrivacyRequestStatus;
+  admin_note: string | null;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 /** Minimal typed shape for the Supabase generated Database type. */
 export type Database = {
   public: {
@@ -338,6 +355,12 @@ export type Database = {
         Update: Partial<EmailLogEntry>;
         Relationships: [];
       };
+      privacy_requests: {
+        Row: PrivacyRequest;
+        Insert: Partial<PrivacyRequest> & Pick<PrivacyRequest, 'request_type' | 'name' | 'email'>;
+        Update: Partial<PrivacyRequest>;
+        Relationships: [];
+      };
     };
     Views: {
       public_unavailable_ranges: {
@@ -345,6 +368,11 @@ export type Database = {
         Relationships: [];
       };
     };
-    Functions: Record<string, never>;
+    Functions: {
+      rate_limit_hit: {
+        Args: { p_key: string; p_max_count: number; p_window_seconds: number };
+        Returns: boolean;
+      };
+    };
   };
 }

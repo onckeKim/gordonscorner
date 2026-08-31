@@ -15,7 +15,11 @@ import {
   type PolicyItem,
 } from '@/lib/content/sections';
 
-export const metadata: Metadata = { title: `Policies — ${siteConfig.propertyName}` };
+export const metadata: Metadata = {
+  title: 'Booking policies',
+  description: `Booking, cancellation, house rules, damages and privacy policies for ${siteConfig.propertyName}.`,
+  alternates: { canonical: '/policies' },
+};
 
 function toAccordionItems(items: PolicyItem[]) {
   return items.map((i) => ({ id: i.id, title: i.title, content: i.content }));

@@ -7,7 +7,11 @@ import type { FaqGroup } from '@/lib/content/faq';
 import type { PolicyEntry } from '@/lib/content/policies';
 import { siteConfig } from '@/lib/config';
 
-export const metadata: Metadata = { title: `FAQ — ${siteConfig.propertyName}` };
+export const metadata: Metadata = {
+  title: 'Frequently asked questions',
+  description: `Answers to common questions about booking, payment, check-in and staying at ${siteConfig.propertyName}.`,
+  alternates: { canonical: '/faq' },
+};
 
 export default async function FaqPage() {
   const [faqGroups, policies] = await Promise.all([
