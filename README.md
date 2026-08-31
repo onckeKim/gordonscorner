@@ -7,8 +7,9 @@ request before it can proceed.
 ## Stack
 
 Next.js 14 (App Router, TypeScript) · Tailwind CSS · Supabase (Postgres, Auth) ·
-Resend (email) · PayFast (payments, pluggable) · Vercel · date-fns / date-fns-tz
-(timezone-safe date math)
+Resend (email) · PayFast (payments, pluggable) · Netlify (deployment target,
+via `@netlify/plugin-nextjs`; Vercel also supported — see "Deployment guide") ·
+date-fns / date-fns-tz (timezone-safe date math)
 
 ## Local setup
 
@@ -1065,28 +1066,43 @@ it, but shouldn't **launch** without it:
 **4. Transactional email (Resend)** — see "Connecting live services" above.
 
 **5. Environment variables** — set every var from `.env.example` in your
-   hosting provider's dashboard (Vercel → Project → Settings →
-   Environment Variables). `NEXT_PUBLIC_SITE_URL` must exactly match your
-   production domain (no trailing slash) — it's used to build every email
-   link and payment return/notify URL. Generate `CRON_SECRET` with
-   `openssl rand -hex 32`.
+   hosting provider's dashboard (Netlify → Site configuration →
+   Environment variables, or Vercel → Project → Settings → Environment
+   Variables). `NEXT_PUBLIC_SITE_URL` must exactly match your production
+   domain (no trailing slash) — it's used to build every email link and
+   payment return/notify URL. Generate `CRON_SECRET` with `openssl rand -hex 32`.
 
-**6. Vercel deployment**
-1. Import the repository, framework preset "Next.js" (auto-detected).
-2. Add the environment variables from step 5.
-3. Deploy. `vercel.json` already defines both cron jobs (`expire-holds`
-   every 15 minutes, `send-scheduled-emails` daily) — Vercel wires them up
-   automatically and (with `CRON_SECRET` set) sends the required
-   `Authorization: Bearer $CRON_SECRET` header itself, no extra config.
-   The 15-minute cadence needs a Pro plan or higher (Hobby cron runs at
-   most once daily) — if staying on Hobby, point an external scheduler
-   (e.g. cron-job.org) at `/api/cron/expire-holds` instead.
+**6. Deployment — Netlify (this project's primary target)**
+1. [app.netlify.com](https://app.netlify.com) → Add new site → Import an
+   existing project → pick this repository. `netlify.toml` already sets
+   the build command, publish directory, and the official
+   `@netlify/plugin-nextjs` plugin — Netlify auto-detects Next.js either
+   way, but the file pins the plugin version.
+2. Add the environment variables from step 5 (Site configuration →
+   Environment variables → Add a variable, or Import from a `.env` file).
+3. Deploy. The Next.js Runtime handles SSR, API routes, and
+   `src/middleware.ts` (as a Netlify Edge Function) with no extra config.
+4. **Cron jobs**: Netlify doesn't read `vercel.json`, so the two scheduled
+   jobs are Netlify Scheduled Functions instead —
+   `netlify/functions/expire-holds-cron.mts` (every 15 minutes) and
+   `netlify/functions/send-scheduled-emails-cron.mts` (daily at 08:00
+   UTC). Each just calls the real `/api/cron/*` route with the
+   `Authorization: Bearer $CRON_SECRET` header — same protected routes,
+   same logic, no duplication. They deploy automatically with the site;
+   nothing extra to configure beyond `CRON_SECRET` already being set in
+   step 5. (Scheduled Functions are available on all Netlify plans,
+   including the free tier.)
+
+   *Alternative — Vercel:* `vercel.json` (still in the repo) defines the
+   same two jobs as Vercel Cron for a Vercel deployment instead; the
+   15-minute cadence needs a Pro plan (Hobby cron runs at most daily).
 
 **7. Domain & SSL**
-1. Vercel → Project → Settings → Domains → add your domain, follow the DNS
-   instructions (A/CNAME record at your registrar).
-2. Vercel issues and renews the SSL certificate automatically — no action
-   needed once DNS propagates.
+1. Netlify → Site configuration → Domain management → Add a domain,
+   follow the DNS instructions (Netlify DNS, or an A/CNAME record at your
+   existing registrar). *(Vercel: Project → Settings → Domains.)*
+2. Netlify issues and renews the SSL certificate (Let's Encrypt)
+   automatically once DNS resolves to it — no action needed.
 3. Update `NEXT_PUBLIC_SITE_URL` to the final domain and redeploy if it
    was set to a placeholder earlier.
 
@@ -1133,14 +1149,16 @@ it, but shouldn't **launch** without it:
    repo doesn't automate that, since it depends entirely on your Supabase
    plan.
 
-**11. Monitoring** — Vercel's dashboard shows deploy status, function
-   invocations/errors, and logs out of the box (Project → Logs/Observability).
-   Supabase's dashboard shows database health, API request volume, and
-   Auth activity. For error alerting beyond what's in the console
+**11. Monitoring** — Netlify's dashboard shows deploy status and function
+   logs out of the box (Site → Logs — separate tabs for the Next.js
+   runtime, Edge Functions/middleware, and the two scheduled cron
+   functions; *Vercel: Project → Logs/Observability*). Supabase's
+   dashboard shows database health, API request volume, and Auth
+   activity. For error alerting beyond what's in the console
    (`console.error` calls throughout the API routes, `payment_events`,
-   `email_log`, and `admin_audit_log` tables), consider adding Sentry or
-   Vercel's own log-drain integration — not wired up in this repo, since
-   it requires an account/API key of the owner's choosing.
+   `email_log`, and `admin_audit_log` tables), consider adding Sentry —
+   not wired up in this repo, since it requires an account/API key of the
+   owner's choosing.
 
 ## Project status: what's done, what's left, how to launch
 
