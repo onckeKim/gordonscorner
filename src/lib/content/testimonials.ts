@@ -2,6 +2,8 @@ export interface TestimonialEntry {
   quote: string;
   author: string;
   detail?: string;
+  /** 1–5 star rating, only if a real one was actually given — never fabricate this for Review/AggregateRating structured data (see src/lib/seo.ts). */
+  rating?: number;
 }
 
 /**

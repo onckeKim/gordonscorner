@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Accordion } from '@/components/ui/Accordion';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { siteConfig } from '@/lib/config';
 import { getSettings } from '@/lib/settings';
 import { getContentSection } from '@/lib/content/store';
@@ -14,12 +15,15 @@ import {
   type CancellationPolicySection,
   type PolicyItem,
 } from '@/lib/content/sections';
+import { resolvePageSeo } from '@/lib/seo/page-overrides';
 
-export const metadata: Metadata = {
-  title: 'Booking policies',
-  description: `Booking, cancellation, house rules, damages and privacy policies for ${siteConfig.propertyName}.`,
-  alternates: { canonical: '/policies' },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return resolvePageSeo({
+    path: '/policies',
+    title: 'Booking policies',
+    description: `Booking, cancellation, house rules, damages and privacy policies for ${siteConfig.propertyName}.`,
+  });
+}
 
 function toAccordionItems(items: PolicyItem[]) {
   return items.map((i) => ({ id: i.id, title: i.title, content: i.content }));
@@ -36,7 +40,9 @@ export default async function PoliciesPage() {
   ]);
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-16">
+    <>
+      <Breadcrumbs items={[{ name: 'Policies', path: '/policies' }]} />
+      <div className="mx-auto max-w-3xl px-6 py-16">
       <p className="eyebrow text-center">Policies</p>
       <h1 className="mt-3 text-center font-display text-4xl font-semibold text-corner-charcoal sm:text-5xl">
         Booking, cancellation &amp; house policies
@@ -151,6 +157,7 @@ export default async function PoliciesPage() {
           {siteConfig.contactEmail}
         </a>
       </p>
-    </div>
+      </div>
+    </>
   );
 }

@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import { MapPin, Users, BedDouble, Bath, Clock, ShieldCheck, Car, Accessibility } from 'lucide-react';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
+import { MapEmbed } from '@/components/MapEmbed';
 import { AmenitiesGrid } from '@/components/AmenityCard';
 import { FilterableGallery } from '@/components/FilterableGallery';
 import { AccommodationAvailability } from '@/components/AccommodationAvailability';
@@ -16,12 +18,15 @@ import {
   type AmenityEntry,
 } from '@/lib/content/sections';
 import type { GalleryPhoto } from '@/lib/content/gallery';
+import { resolvePageSeo } from '@/lib/seo/page-overrides';
 
-export const metadata: Metadata = {
-  title: 'Accommodation',
-  description: `${propertyDetails.bedrooms}-bedroom, ${propertyDetails.bathrooms}-bathroom self-catering accommodation sleeping up to ${propertyDetails.maxGuests} guests in ${siteConfig.address}. View amenities, photos and availability.`,
-  alternates: { canonical: '/accommodation' },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return resolvePageSeo({
+    path: '/accommodation',
+    title: 'Accommodation',
+    description: `${propertyDetails.bedrooms}-bedroom, ${propertyDetails.bathrooms}-bathroom self-catering accommodation sleeping up to ${propertyDetails.maxGuests} guests in ${siteConfig.address}. View amenities, photos and availability.`,
+  });
+}
 
 const CAPACITY_STATS = [
   { icon: Users, label: 'Guests', value: `Up to ${propertyDetails.maxGuests}` },
@@ -44,6 +49,7 @@ export default async function AccommodationPage() {
 
   return (
     <div>
+      <Breadcrumbs items={[{ name: 'Accommodation', path: '/accommodation' }]} />
       <section className="border-b border-corner-stone">
         <div className="mx-auto max-w-4xl px-6 py-16">
           <p className="eyebrow">The Accommodation</p>
@@ -137,11 +143,7 @@ export default async function AccommodationPage() {
               {site.addressLine1}, {site.addressLine2}
             </p>
           </div>
-          <div
-            role="img"
-            aria-label={`Map placeholder showing ${site.address}`}
-            className="aspect-[4/3] rounded-xl2 bg-gradient-to-br from-corner-forest/15 via-corner-stone to-corner-gold/15"
-          />
+          <MapEmbed mapEmbedUrl={site.mapEmbedUrl} address={site.address} className="aspect-[4/3] rounded-xl2" />
         </div>
       </section>
 

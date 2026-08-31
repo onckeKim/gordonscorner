@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
+import { trackConversion } from '@/lib/analytics/track';
 
 interface EnquiryFormProps {
   className?: string;
@@ -34,6 +35,7 @@ export function EnquiryForm({ className, idPrefix = 'enquiry' }: EnquiryFormProp
         throw new Error(data.error ?? 'Could not send your message. Please try again.');
       }
       setStatus('success');
+      trackConversion('contact_form_submitted');
       setName('');
       setEmail('');
       setMessage('');

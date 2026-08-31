@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import { Phone, Mail, MessageCircle, MapPin } from 'lucide-react';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
+import { MapEmbed } from '@/components/MapEmbed';
 import { EnquiryForm } from '@/components/EnquiryForm';
 import { siteConfig } from '@/lib/config';
 import { getContentSection } from '@/lib/content/store';
@@ -11,12 +13,15 @@ import {
   type ContactContentSection,
   type SocialContentSection,
 } from '@/lib/content/sections';
+import { resolvePageSeo } from '@/lib/seo/page-overrides';
 
-export const metadata: Metadata = {
-  title: 'Contact',
-  description: `Get in touch with ${siteConfig.propertyName} in ${siteConfig.address} — phone, email, WhatsApp, or send us a message directly.`,
-  alternates: { canonical: '/contact' },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return resolvePageSeo({
+    path: '/contact',
+    title: 'Contact',
+    description: `Get in touch with ${siteConfig.propertyName} in ${siteConfig.address} — phone, email, WhatsApp, or send us a message directly.`,
+  });
+}
 
 export default async function ContactPage() {
   const [site, contact, social] = await Promise.all([
@@ -40,6 +45,7 @@ export default async function ContactPage() {
 
   return (
     <div>
+      <Breadcrumbs items={[{ name: 'Contact', path: '/contact' }]} />
       <section className="border-b border-corner-stone">
         <div className="mx-auto max-w-3xl px-6 py-16 text-center">
           <p className="eyebrow">Contact</p>
@@ -91,11 +97,7 @@ export default async function ContactPage() {
               </p>
             </div>
 
-            <div
-              role="img"
-              aria-label={`Map placeholder showing ${site.address}`}
-              className="mt-6 aspect-[16/9] rounded-xl2 bg-gradient-to-br from-corner-forest/15 via-corner-stone to-corner-gold/15"
-            />
+            <MapEmbed mapEmbedUrl={site.mapEmbedUrl} address={site.address} className="mt-6 aspect-[16/9] rounded-xl2" />
 
             <div className="card mt-6">
               <p className="font-display text-lg font-semibold text-corner-charcoal">Check-in support</p>

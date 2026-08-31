@@ -17,6 +17,10 @@ import {
   houseRulesContentDefaults,
   damagesSecurityContentDefaults,
   privacyContentDefaults,
+  areaGuideIntroContentDefaults,
+  areaAttractionsContentDefaults,
+  areaRestaurantsContentDefaults,
+  areaActivitiesContentDefaults,
   type SiteContentSection,
   type PropertyContentSection,
   type AboutContentSection,
@@ -27,6 +31,8 @@ import {
   type BookingPolicySection,
   type CancellationPolicySection,
   type PolicyItem,
+  type AreaGuideIntroSection,
+  type AreaGuideEntry,
 } from '@/lib/content/sections';
 import type { FaqGroup } from '@/lib/content/faq';
 import type { PolicyEntry } from '@/lib/content/policies';
@@ -56,6 +62,10 @@ export default async function AdminContentPage() {
     houseRules,
     damagesSecurity,
     privacyPolicy,
+    areaGuideIntro,
+    areaAttractions,
+    areaRestaurants,
+    areaActivities,
   ] = await Promise.all([
     getContentSection<SiteContentSection>('site', siteContentDefaults),
     getContentSection<PropertyContentSection>('property', propertyContentDefaults),
@@ -73,6 +83,10 @@ export default async function AdminContentPage() {
     getContentSection<PolicyItem[]>('houseRules', houseRulesContentDefaults),
     getContentSection<PolicyItem[]>('damagesSecurity', damagesSecurityContentDefaults),
     getContentSection<PolicyItem[]>('privacyPolicy', privacyContentDefaults),
+    getContentSection<AreaGuideIntroSection>('areaGuideIntro', areaGuideIntroContentDefaults),
+    getContentSection<AreaGuideEntry[]>('areaAttractions', areaAttractionsContentDefaults),
+    getContentSection<AreaGuideEntry[]>('areaRestaurants', areaRestaurantsContentDefaults),
+    getContentSection<AreaGuideEntry[]>('areaActivities', areaActivitiesContentDefaults),
   ]);
 
   return (
@@ -300,6 +314,51 @@ export default async function AdminContentPage() {
           ]}
           initialValue={privacyPolicy.map((p) => ({ ...p }))}
           emptyRow={{ id: `privacy-${Date.now()}`, title: '', content: '' }}
+        />
+
+        <TextFieldsSection
+          sectionKey="areaGuideIntro"
+          title="Area guide — intro, transport & best time to visit"
+          initialValue={{ ...areaGuideIntro }}
+          fields={[
+            { key: 'introTitle', label: 'Intro title' },
+            { key: 'introText', label: 'Intro text', type: 'textarea' },
+            { key: 'transportInfo', label: 'Getting here', type: 'textarea' },
+            { key: 'bestTimeToVisit', label: 'Best time to visit', type: 'textarea' },
+          ]}
+        />
+
+        <ObjectListSection
+          sectionKey="areaAttractions"
+          title="Area guide — Attractions"
+          fields={[
+            { key: 'name', label: 'Name' },
+            { key: 'description', label: 'Description', type: 'textarea' },
+          ]}
+          initialValue={areaAttractions.map((a) => ({ ...a }))}
+          emptyRow={{ name: '', description: '' }}
+        />
+
+        <ObjectListSection
+          sectionKey="areaRestaurants"
+          title="Area guide — Restaurants"
+          fields={[
+            { key: 'name', label: 'Name' },
+            { key: 'description', label: 'Description', type: 'textarea' },
+          ]}
+          initialValue={areaRestaurants.map((r) => ({ ...r }))}
+          emptyRow={{ name: '', description: '' }}
+        />
+
+        <ObjectListSection
+          sectionKey="areaActivities"
+          title="Area guide — Activities"
+          fields={[
+            { key: 'name', label: 'Name' },
+            { key: 'description', label: 'Description', type: 'textarea' },
+          ]}
+          initialValue={areaActivities.map((a) => ({ ...a }))}
+          emptyRow={{ name: '', description: '' }}
         />
       </div>
     </div>

@@ -8,6 +8,16 @@ import { contactIntro, checkInSupportInfo } from './contact';
 import { testimonials, type TestimonialEntry } from './testimonials';
 import type { AmenityIconKey } from './property';
 import {
+  areaAttractionsDefaults,
+  areaRestaurantsDefaults,
+  areaActivitiesDefaults,
+  areaTransportInfoDefault,
+  areaBestTimeToVisitDefault,
+  areaIntroTitleDefault,
+  areaIntroTextDefault,
+  type AreaGuideEntry,
+} from './area-guide';
+import {
   bookingPolicyDefaults,
   cancellationPolicyDefaults,
   houseRulesDefaults,
@@ -146,6 +156,25 @@ export const socialContentDefaults: SocialContentSection = {
   tiktok: '',
 };
 
+export interface AreaGuideIntroSection {
+  introTitle: string;
+  introText: string;
+  transportInfo: string;
+  bestTimeToVisit: string;
+}
+
+export const areaGuideIntroContentDefaults: AreaGuideIntroSection = {
+  introTitle: areaIntroTitleDefault,
+  introText: areaIntroTextDefault,
+  transportInfo: areaTransportInfoDefault,
+  bestTimeToVisit: areaBestTimeToVisitDefault,
+};
+
+export type { AreaGuideEntry };
+export const areaAttractionsContentDefaults: AreaGuideEntry[] = [...areaAttractionsDefaults];
+export const areaRestaurantsContentDefaults: AreaGuideEntry[] = [...areaRestaurantsDefaults];
+export const areaActivitiesContentDefaults: AreaGuideEntry[] = [...areaActivitiesDefaults];
+
 export const bookingPolicyContentDefaults: BookingPolicySection = bookingPolicyDefaults;
 export const cancellationPolicyContentDefaults: CancellationPolicySection = cancellationPolicyDefaults;
 export const houseRulesContentDefaults: PolicyItem[] = houseRulesDefaults;
@@ -169,4 +198,8 @@ export const CONTENT_SECTIONS = [
   { key: 'houseRules', label: 'Policies page — House rules' },
   { key: 'damagesSecurity', label: 'Policies page — Damages & security' },
   { key: 'privacyPolicy', label: 'Policies page — Privacy' },
+  { key: 'areaGuideIntro', label: 'Area guide — Intro, transport & best time to visit' },
+  { key: 'areaAttractions', label: 'Area guide — Attractions' },
+  { key: 'areaRestaurants', label: 'Area guide — Restaurants' },
+  { key: 'areaActivities', label: 'Area guide — Activities' },
 ] as const;

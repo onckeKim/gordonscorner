@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { createBookingRequest, WorkflowError } from '@/lib/booking/workflow';
 import { checkIpRateLimit } from '@/lib/rate-limit';
 import { checkHoneypot } from '@/lib/spam-protection';
+import { logAnalyticsEvent } from '@/lib/analytics/log-event';
 import { handleApiError, RateLimitError } from '@/lib/api-response';
 
 const bookingRequestSchema = z.object({
@@ -46,6 +47,11 @@ export async function POST(request: NextRequest) {
     }
 
     const booking = await createBookingRequest(body);
+    await logAnalyticsEvent({
+      eventType: 'booking_requested',
+      bookingId: booking.id,
+      metadata: { checkIn: booking.check_in, checkOut: booking.check_out },
+    });
     return NextResponse.json({ booking }, { status: 201 });
   } catch (err) {
     return handleApiError(err);

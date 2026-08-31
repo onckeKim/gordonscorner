@@ -1,4 +1,5 @@
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
+import { PaymentReturnTracker } from '@/components/PaymentReturnTracker';
 
 export default async function PayReturnPage({
   params,
@@ -21,6 +22,7 @@ export default async function PayReturnPage({
 
   return (
     <div className="mx-auto max-w-md px-6 py-24 text-center">
+      <PaymentReturnTracker status={booking?.status ?? null} />
       <h1 className="font-display text-2xl font-semibold">
         {cancelled ? 'Payment not completed' : 'Thank you'}
       </h1>

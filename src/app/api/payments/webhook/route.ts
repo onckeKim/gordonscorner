@@ -9,6 +9,7 @@ import {
 } from '@/lib/booking/workflow';
 import { sendReceiptEmail, sendPaymentFailedEmail } from '@/lib/email';
 import { siteConfig } from '@/lib/config';
+import { logAnalyticsEvent } from '@/lib/analytics/log-event';
 import type { WebhookEvent } from '@/lib/payments';
 
 export const dynamic = 'force-dynamic';
@@ -216,8 +217,11 @@ export async function POST(request: NextRequest) {
       let confirmedBooking = null;
       if (event.paymentType === 'deposit') {
         confirmedBooking = await markDepositPaid(event.bookingId);
+        await logAnalyticsEvent({ eventType: 'deposit_paid', bookingId: event.bookingId, metadata: { amount: event.amount } });
+        await logAnalyticsEvent({ eventType: 'booking_confirmed', bookingId: event.bookingId });
       } else if (event.paymentType === 'balance') {
         confirmedBooking = await markBalancePaidViaPayment(event.bookingId);
+        await logAnalyticsEvent({ eventType: 'balance_paid', bookingId: event.bookingId, metadata: { amount: event.amount } });
       }
       if (confirmedBooking && paymentId) {
         const { data: paidPayment } = await db.from('payments').select('*').eq('id', paymentId).single();

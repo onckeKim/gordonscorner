@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
 
 export default function BookingLookupPage() {
   const router = useRouter();
@@ -15,7 +16,9 @@ export default function BookingLookupPage() {
   }
 
   return (
-    <div className="mx-auto max-w-md px-6 py-24">
+    <div>
+      <Breadcrumbs items={[{ name: 'Find my booking', path: '/booking/lookup' }]} />
+      <div className="mx-auto max-w-md px-6 py-24">
       <h1 className="font-display text-3xl font-semibold">Find your booking</h1>
       <p className="mt-2 text-sm text-corner-muted">
         Enter the booking reference from your confirmation email (e.g. GC-2026-4V9K), or use the
@@ -32,6 +35,7 @@ export default function BookingLookupPage() {
           Find
         </button>
       </form>
+      </div>
     </div>
   );
 }

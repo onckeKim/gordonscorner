@@ -83,4 +83,18 @@ body {
   .section-heading {
     @apply font-display text-3xl font-semibold text-corner-charcoal sm:text-4xl;
   }
+
+  /* --- Blog post body (src/lib/blog/render.ts output) -------------------- */
+  .blog-content p {
+    @apply mb-5 text-base leading-relaxed text-corner-charcoal;
+  }
+  .blog-content h2 {
+    @apply mb-4 mt-10 font-display text-2xl font-semibold text-corner-charcoal;
+  }
+  .blog-content h3 {
+    @apply mb-3 mt-8 font-display text-xl font-semibold text-corner-charcoal;
+  }
+  .blog-content ul {
+    @apply mb-5 list-disc space-y-2 pl-5 text-base text-corner-charcoal;
+  }
 }

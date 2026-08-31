@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { sendEnquiryEmail } from '@/lib/email';
 import { checkIpRateLimit } from '@/lib/rate-limit';
 import { checkHoneypot } from '@/lib/spam-protection';
+import { logAnalyticsEvent } from '@/lib/analytics/log-event';
 import { handleApiError, RateLimitError } from '@/lib/api-response';
 
 const enquirySchema = z.object({
@@ -27,6 +28,7 @@ export async function POST(request: NextRequest) {
     }
 
     await sendEnquiryEmail(body);
+    await logAnalyticsEvent({ eventType: 'contact_form_submitted' });
     return NextResponse.json({ ok: true }, { status: 201 });
   } catch (err) {
     return handleApiError(err);

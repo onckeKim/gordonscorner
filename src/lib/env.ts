@@ -50,6 +50,10 @@ const envSchema = z.object({
 
   // Admin session
   ADMIN_SESSION_IDLE_MINUTES: z.coerce.number().int().positive().optional(),
+
+  // AI-assisted content generation (/admin/blog "Generate with AI") — optional, the feature is
+  // simply unavailable (with a clear message) until the owner supplies their own Anthropic API key.
+  ANTHROPIC_API_KEY: z.string().min(10).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -93,6 +97,11 @@ export function validateEnv(): Env {
   if (!env.CRON_SECRET) {
     // eslint-disable-next-line no-console
     console.warn('CRON_SECRET not set — /api/cron/* routes will reject all requests until it is set.');
+  }
+
+  if (!env.ANTHROPIC_API_KEY) {
+    // eslint-disable-next-line no-console
+    console.warn('ANTHROPIC_API_KEY not set — the AI content-generation feature in /admin/blog will be unavailable.');
   }
 
   validated = env;

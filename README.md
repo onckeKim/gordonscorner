@@ -19,7 +19,7 @@ cp .env.example .env.local
 
 1. Create a [Supabase](https://supabase.com) project.
 2. In the SQL editor, run every file in `supabase/migrations/` **in order**
-   (`0001` → `0012`) — each was validated end-to-end against a real Postgres
+   (`0001` → `0013`) — each was validated end-to-end against a real Postgres
    instance before being committed (see "Booking engine internals" below).
 3. Copy your project URL + anon key + service role key into `.env.local`
    (Settings → API).
@@ -204,6 +204,11 @@ into build-time static HTML and an admin's content edit would never appear
 without a full redeploy. Prices, fees, and check-in/out times are
 deliberately **not** duplicated here — they're real operational settings
 with one source of truth (`/admin/settings`), linked from the Content page.
+
+**SEO** (`/admin/seo`, admin role only), **Blog** (`/admin/blog`), and
+**Analytics** (`/admin/analytics`) — tracking/verification/local-SEO
+settings, per-page metadata overrides, redirects, the blog CMS, and the
+first-party funnel dashboard; see "SEO" below for the full picture of each.
 
 **Settings** (`/admin/settings`, admin role only) — every field listed under
 "Business rules" above, plus the team/role panel. **Audit log**
@@ -736,7 +741,7 @@ npm run test:watch
 ```
 
 Vitest, configured in `vitest.config.mts`. **What's covered by real,
-passing automated tests** (86 tests across 9 files as of this writing):
+passing automated tests** (144 tests across 14 files as of this writing):
 - Pure business logic: pricing engine (weekend/seasonal rates, fees,
   discount, tax, deposit split, rounding), date-range math, timezone/lead
   time reasoning, booking-reference/payment-token generation, CSV export.
@@ -756,6 +761,15 @@ passing automated tests** (86 tests across 9 files as of this writing):
   duplicate delivery) is treated as a safe no-op; a genuine first-time paid
   deposit confirms the booking and sends exactly one receipt; a
   signature-verification failure never touches the booking.
+- SEO/content logic: blog slug generation and validation (including that
+  every output of `slugify()` passes `isValidSlug()`), the blog content
+  renderer (paragraphs/headings/lists, and that every text line is
+  HTML-escaped — a raw `<script>` in a post never survives rendering), the
+  deterministic content-score/readability checks, per-page SEO override
+  resolution (falls back to coded defaults on a blank field or a database
+  error), and the redirect-lookup middleware helper (exact-match, the
+  60-second in-memory cache actually reduces query count, cache expiry,
+  and fail-open on a database error).
 
 **What's authored but not executable in every environment:** this sandbox
 has no live Supabase project connected, so true integration/E2E tests
@@ -779,28 +793,172 @@ here. What stands in for them:
   by the dev payment simulator (`PAYMENT_PROVIDER=dev`, `/pay/simulate`) —
   walk through it by hand once your Supabase project is live (see
   "Production testing" below for the specific scenarios to click through).
+- The AI content-generation feature (`/admin/blog/new` → "Generate with
+  AI") could not be exercised live here — no `ANTHROPIC_API_KEY` is
+  configured in this sandbox. The request/response handling, error paths
+  (not-configured, provider error, malformed response), and rate limiting
+  are implemented and typechecked, but the actual Anthropic API call has
+  not been made. Test it once you've set the key.
+- GA4/GTM/Clarity/FB Pixel script loading (`AnalyticsScripts.tsx`) is
+  correct by inspection (each script's own vendor-supplied snippet, loaded
+  conditionally) but wasn't verified against a live account here — check
+  each platform's own debug/preview tool after configuring an ID.
 
 ## SEO
 
+**Technical**
 - `src/app/layout.tsx`: site-wide metadata defaults (title template, OG/
   Twitter cards, `metadataBase`, keywords, `viewport`/`themeColor`).
-- Every public page sets its own `title`/`description`/canonical
-  (`export const metadata`).
-- `src/app/sitemap.ts` / `src/app/robots.ts`: only genuinely public,
-  indexable routes are listed (admin, API, guest-token pages like
-  `/booking/[id]` and `/pay/*` are excluded).
+- Every public page uses `generateMetadata()` (not a static `export const
+  metadata`) so its title/description/canonical/OG image can be overridden
+  live from `/admin/seo` (see "Per-page overrides" below) — falling back to
+  a sensible coded default when no override exists. `src/lib/seo/page-overrides.ts:resolvePageSeo()`
+  is the shared helper every page calls; it fails open (uses the coded
+  default) if the database is unreachable, so a DB hiccup never breaks a
+  page's `<head>`.
+- `src/app/sitemap.ts`: dynamic (`force-dynamic`, reads the DB on every
+  request) — lists every genuinely public, indexable route plus every
+  published/scheduled-and-due blog post, so a newly published post appears
+  in it automatically with no manual maintenance. Excludes `/admin/*`,
+  `/api/*`, guest-token pages (`/booking/[id]`, `/pay/*`), and `/search`
+  (noindex — see below).
+- `src/app/robots.ts`: allows everything except `/admin`, `/api`, `/pay/`,
+  and `/booking/` (with `/booking/lookup` explicitly re-allowed, since it's
+  a real public utility page under that prefix).
 - `src/app/opengraph-image.tsx` / `src/app/icon.tsx`: generated (no binary
   asset needed) OG image and favicon via `next/og` — swap for real
   photography/a logo once available (same "Assumptions & placeholders"
-  section as everything else content-shaped).
-- `src/lib/seo.ts`: `lodgingBusinessJsonLd()` — schema.org `LodgingBusiness`
-  structured data (name, address, phone, price range) rendered site-wide by
-  the `(site)` layout via `<JsonLd>` — this is what lets Google understand
-  the site as short-stay accommodation for local search.
-- All of the above reads from `siteConfig`/`propertyDetails`/`pricingConfig`
-  (`src/lib/config.ts`), so correcting the address, phone number, or price
-  once (per "Content checklist" below) automatically corrects every
-  metadata tag and the structured data — nothing is duplicated.
+  section as everything else content-shaped), or set a per-page override
+  image from `/admin/seo`.
+- Breadcrumbs (`src/components/Breadcrumbs.tsx`) on every non-home public
+  page — both a visible trail (structured internal linking) and matching
+  `BreadcrumbList` JSON-LD.
+- Redirects: an admin-managed `redirects` table (migration `0013`, editable
+  at `/admin/seo`), checked by `src/middleware.ts` before routing on every
+  public request. Cached in-memory for up to 60 seconds so this doesn't add
+  a database round-trip to every page load; fails open (no redirect) if the
+  database is unreachable.
+
+**Structured data (`src/lib/seo.ts`)** — every function is called only with
+real data already on the page (never markup hidden or fabricated content):
+- `lodgingBusinessJsonLd()` — schema.org `LodgingBusiness` (a subtype of
+  `LocalBusiness`, so a separate `LocalBusiness` block would be redundant):
+  name, address, phone, price range, amenities, and — once configured at
+  `/admin/seo` — geo coordinates, a Google Business Profile `sameAs` link,
+  and service area. Includes `AggregateRating`/`Review` nodes **only** if a
+  testimonial has a real, explicitly-given `rating` (`TestimonialEntry.rating`)
+  — never fabricates a star rating; with the current placeholder
+  testimonials (no ratings), this is correctly omitted.
+- `websiteJsonLd()` — schema.org `WebSite`, including a `SearchAction`
+  pointing at `/search` (a real, working search over blog posts — see
+  below; Google warns against declaring `SearchAction` with no actual
+  search behind it, so this only exists because `/search` does).
+- `organizationJsonLd()` — the operating business, with a `logo` and
+  `sameAs` links built from `/admin/content` → Social.
+- `faqPageJsonLd()` — rendered on `/faq` from the exact Q&A pairs shown on
+  the page.
+- `blogPostingJsonLd()` — per blog post, type driven by that post's own
+  `schema_type` field (`BlogPosting`/`Article`/`NewsArticle`).
+- `breadcrumbJsonLd()` / `imageObjectJsonLd()` — used by `Breadcrumbs` and
+  available for any image that warrants its own node.
+
+**Local SEO**
+- `/area-guide` — attractions, restaurants, activities, transport, and
+  best-time-to-visit content, all admin-editable at `/admin/content`
+  (`areaGuideIntro`/`areaAttractions`/`areaRestaurants`/`areaActivities`).
+  `areaAttractions` starts pre-filled from the existing `localHighlights`
+  in `src/lib/content/property.ts`; restaurants/activities ship with a
+  single clearly-labelled placeholder each ("Add a real restaurant") —
+  replace before launch.
+- Real Google Maps embeds: `src/components/MapEmbed.tsx` renders an
+  `<iframe>` once `site.mapEmbedUrl` is set at `/admin/content` → Home page
+  & contact details (Google Maps → Share → Embed a map → copy the `src`
+  URL) — used on `/accommodation`, `/contact`, and `/area-guide`. Falls
+  back to a labelled placeholder until then.
+- Geo coordinates, Google Business Profile URL, Google Place ID, and a
+  free-text service-area description are all set at `/admin/seo` and flow
+  straight into the `LodgingBusiness` structured data.
+
+**Blog (`src/lib/blog/`, `/admin/blog`, public `/blog` + `/blog/[slug]`)**
+- `blog_posts` table (migration `0013`): draft/scheduled/published status
+  (a scheduled post becomes visible automatically once its `published_at`
+  passes — checked at query time, no cron needed), category, tags, and a
+  full set of per-post SEO fields (meta title/description/focus keyword/
+  canonical URL/social image/structured-data type).
+- Content is plain text with a small, dependency-free markdown-ish subset
+  (`src/lib/blog/render.ts`): blank-line-separated paragraphs, `## `/`### `
+  headings, `- ` bullet lists — matching this app's existing preference
+  for no heavy WYSIWYG/markdown library. Every line is HTML-escaped before
+  any markup is added, so post content can never inject arbitrary HTML.
+- `/admin/blog` lists every post regardless of status; `/admin/blog/new`
+  and `/admin/blog/[id]/edit` share `BlogPostEditor`, which also shows a
+  live, fully deterministic **content score** (see below) and — on the
+  "new post" screen — the AI draft generator (see below).
+- Public `/blog` supports category/tag filtering; `/blog/[slug]` renders
+  the post with `BlogPosting`/`Article`/`NewsArticle` JSON-LD, breadcrumbs,
+  and full metadata (falls back through `meta_description` → `excerpt` →
+  an auto-generated excerpt if neither is set).
+- `/search` — a real search over blog post title/excerpt/content (not a
+  stub), `noindex`'d itself since individual search-result pages aren't
+  worth ranking.
+
+**Content score (`src/lib/content-score/score.ts`)** — computed live in
+the blog editor from the content already in the form, zero AI/network
+calls involved:
+- Readability: a Flesch Reading Ease approximation (word/sentence/syllable
+  counts) mapped to a plain-English label ("Easy", "Standard", ...).
+- SEO checks (each a pass/fail computed directly from the input, an SEO
+  score = percentage passed): title/meta-description length, content
+  length (300+ words), internal link presence, featured-image alt text,
+  and — when a focus keyword is set — whether it appears in the title,
+  meta description, first ~100 words, and at least one heading.
+
+**AI-assisted content generation (optional, `ANTHROPIC_API_KEY`)**
+- The "Generate with AI" panel on `/admin/blog/new` calls
+  `POST /api/admin/ai/generate` (admin-only, rate-limited per admin —
+  20/hour, since each call costs the owner's own API usage), which calls
+  the Anthropic Messages API directly via `fetch` (`src/lib/ai/generate.ts`,
+  no SDK dependency) with a structured prompt and returns a title, meta
+  description, slug, headings, body, 2–4 FAQ entries, a CTA sentence, and
+  internal-link suggestions. The generated draft becomes the blog editor's
+  starting point (never auto-saved/published) — **always fact-check and
+  review before publishing**; the prompt explicitly instructs the model to
+  use bracketed placeholders like `[restaurant name]` rather than invent
+  specific facts, but that's a mitigation, not a guarantee.
+- With no `ANTHROPIC_API_KEY` set, the panel calls the same endpoint and
+  gets back a clear "not configured" message (503) — there is no fake/
+  canned-output fallback, matching this app's "off until configured"
+  pattern for every other optional third-party integration.
+
+**Analytics (`/admin/seo`, `/admin/analytics`)**
+- GA4, Google Tag Manager, Microsoft Clarity, and Meta/Facebook Pixel: each
+  strictly opt-in — `src/components/AnalyticsScripts.tsx` (loaded only in
+  the `(site)` layout, never in `/admin`) renders nothing until the
+  corresponding ID is set at `/admin/seo`. Prefer GA4 direct *or* GTM, not
+  both, to avoid double-counting pageviews.
+- Google Search Console verification: paste the HTML-tag method's content
+  value at `/admin/seo` → rendered as a `<meta name="google-site-verification">`
+  tag by the `(site)` layout's `generateMetadata`.
+- Conversion tracking (`src/lib/analytics/track.ts`, client-side): fires a
+  GA4/FB Pixel event at contact-form submit, booking-request submit, and
+  (via `PaymentReturnTracker` on the payment return page, only when the
+  booking's real DB status already shows a successful payment) deposit
+  paid — purely to feed those third-party platforms' own conversion data.
+- **The numbers that actually matter for the funnel don't depend on any of
+  that being configured.** `src/lib/analytics/log-event.ts` writes directly
+  to a first-party `analytics_events` table (migration `0013`) from the
+  server-side moment each step really happens — enquiry sent, booking
+  requested, deposit paid, balance paid, booking confirmed — inside the
+  relevant API route/webhook handler, never from a client-posted event (so
+  it can't be inflated by a bot hitting a public endpoint). `/admin/analytics`
+  shows these as real counts and a request-to-deposit conversion rate, for
+  the last 30 days and all-time, with zero external account required.
+
+All of the above reads from `siteConfig`/`propertyDetails`/`pricingConfig`
+(`src/lib/config.ts`) and the live `settings`/content tables, so correcting
+the address, phone number, or price once (per "Content checklist" below)
+automatically corrects every metadata tag and structured-data node —
+nothing is duplicated.
 
 ## Owner content checklist
 
@@ -855,13 +1013,34 @@ it, but shouldn't **launch** without it:
       "Connecting live services")
 - [ ] Email-service account (Resend — see "Connecting live services")
 - [ ] Domain name (for `NEXT_PUBLIC_SITE_URL` and Vercel domain setup)
+- [ ] Area guide content — restaurants and activities currently ship with
+      one placeholder each ("Add a real restaurant"/"Add a real activity");
+      attractions are pre-filled from real-sounding placeholder local
+      highlights — replace all of it at `/admin/content` (see "SEO" →
+      "Local SEO" above)
+- [ ] Google Maps embed URL (`/admin/content` → Home page & contact
+      details → Map embed URL — Google Maps → Share → Embed a map)
+- [ ] Geo coordinates, Google Business Profile URL, Google Place ID, and a
+      service-area description (`/admin/seo`) — power local-SEO structured
+      data and map embeds
+- [ ] Analytics/tracking IDs, if wanted: GA4 Measurement ID, Google Tag
+      Manager container ID, Microsoft Clarity project ID, Meta/Facebook
+      Pixel ID (`/admin/seo`) — the site fully works with none of these set;
+      the first-party funnel numbers at `/admin/analytics` don't need them
+- [ ] Google Search Console verification code (`/admin/seo`, HTML-tag
+      method — paste just the `content=` value)
+- [ ] `ANTHROPIC_API_KEY`, if the AI blog-draft generator is wanted
+      (`/admin/blog/new` → "Generate with AI") — the rest of the blog
+      system works fully without it
+- [ ] At least one real blog post — `blog_posts` is empty until an admin
+      creates one at `/admin/blog/new`
 
 ## Deployment guide
 
 **1. Supabase**
 1. Create a project at [supabase.com](https://supabase.com).
 2. SQL editor → run every file in `supabase/migrations/` in order, `0001`
-   through `0012`.
+   through `0013`.
 3. Settings → API: copy the Project URL, `anon` public key, and
    `service_role` secret key.
 4. Storage: the `payment-proofs` bucket (private) is created automatically
@@ -970,11 +1149,15 @@ it, but shouldn't **launch** without it:
 check-in/out → cancellation/refund), server-side pricing and availability
 with a database-level double-booking guard, a role-based admin portal
 (dashboard, bookings, calendar, payments, content, settings, team, audit
-log, privacy requests) with MFA and session hardening, 20+ transactional
-email types with logging and a resend UI, a full policies system with
-versioned consent capture, the security/privacy/reliability hardening and
-automated test suite described above, and SEO (metadata, sitemap, robots,
-structured data, generated OG image/favicon).
+log, privacy requests, SEO, blog, analytics) with MFA and session
+hardening, 20+ transactional email types with logging and a resend UI, a
+full policies system with versioned consent capture, the security/privacy/
+reliability hardening and 144-test automated suite described above, full
+technical/local SEO (dynamic sitemap, per-page metadata overrides,
+redirects, structured data, an area guide, generated OG image/favicon), a
+blog system with a deterministic content-score panel and an optional
+AI draft generator, and first-party funnel analytics alongside optional
+GA4/GTM/Clarity/FB Pixel integration.
 
 **Outstanding before launch:** everything in "Owner content checklist"
 above — this is a functioning, secure booking engine dressed in realistic

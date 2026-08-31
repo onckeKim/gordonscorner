@@ -1,17 +1,22 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { PrivacyRequestForm } from '@/components/PrivacyRequestForm';
 import { siteConfig } from '@/lib/config';
+import { resolvePageSeo } from '@/lib/seo/page-overrides';
 
-export const metadata: Metadata = {
-  title: 'Privacy request',
-  description: `Request an export, correction, or deletion of the personal data ${siteConfig.propertyName} holds about you.`,
-  alternates: { canonical: '/privacy-request' },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return resolvePageSeo({
+    path: '/privacy-request',
+    title: 'Privacy request',
+    description: `Request an export, correction, or deletion of the personal data ${siteConfig.propertyName} holds about you.`,
+  });
+}
 
 export default function PrivacyRequestPage() {
   return (
     <div>
+      <Breadcrumbs items={[{ name: 'Privacy request', path: '/privacy-request' }]} />
       <section className="border-b border-corner-stone">
         <div className="mx-auto max-w-3xl px-6 py-16 text-center">
           <p className="eyebrow">Your data</p>

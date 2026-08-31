@@ -19,6 +19,7 @@ const ENV_KEYS = [
   'PAYFAST_MODE',
   'CRON_SECRET',
   'ADMIN_SESSION_IDLE_MINUTES',
+  'ANTHROPIC_API_KEY',
 ];
 
 const savedEnv: Record<string, string | undefined> = {};

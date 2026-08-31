@@ -8,6 +8,8 @@ const EXPLORE_LINKS = [
   { href: '/accommodation', label: 'Accommodation' },
   { href: '/gallery', label: 'Gallery' },
   { href: '/about', label: 'About' },
+  { href: '/area-guide', label: 'Area guide' },
+  { href: '/blog', label: 'Blog' },
   { href: '/book', label: 'Check availability' },
 ];
 

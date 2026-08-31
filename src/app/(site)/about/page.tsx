@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { ButtonLink } from '@/components/ui/Button';
 import { siteConfig } from '@/lib/config';
 import { getContentSection } from '@/lib/content/store';
@@ -8,12 +9,15 @@ import {
   type AboutContentSection,
   type PropertyContentSection,
 } from '@/lib/content/sections';
+import { resolvePageSeo } from '@/lib/seo/page-overrides';
 
-export const metadata: Metadata = {
-  title: 'About',
-  description: `The story behind ${siteConfig.propertyName}, a boutique self-catering retreat in ${siteConfig.address}.`,
-  alternates: { canonical: '/about' },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return resolvePageSeo({
+    path: '/about',
+    title: 'About',
+    description: `The story behind ${siteConfig.propertyName}, a boutique self-catering retreat in ${siteConfig.address}.`,
+  });
+}
 
 export default async function AboutPage() {
   const [about, property] = await Promise.all([
@@ -23,6 +27,7 @@ export default async function AboutPage() {
 
   return (
     <div>
+      <Breadcrumbs items={[{ name: 'About', path: '/about' }]} />
       <section className="border-b border-corner-stone">
         <div className="mx-auto max-w-3xl px-6 py-16">
           <p className="eyebrow">Our story</p>

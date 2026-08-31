@@ -11,6 +11,7 @@ import { calculateStayPricing, type PricingInputs } from '@/lib/pricing';
 import { propertyDetails } from '@/lib/config';
 import type { PublicSettings } from '@/lib/settings';
 import { POLICY_VERSION } from '@/lib/content/policy-sections';
+import { trackConversion } from '@/lib/analytics/track';
 
 /**
  * Fetched once on mount from /api/settings/public so the live estimate
@@ -202,6 +203,7 @@ export function BookingForm() {
         throw new Error(data.error ?? 'Could not submit your request.');
       }
 
+      trackConversion('booking_requested', { value: pricing?.depositAmount, currency: pricing?.currency });
       router.push(`/booking/${data.booking.id}?justSubmitted=1`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.');

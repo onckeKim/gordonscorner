@@ -206,8 +206,78 @@ export type Settings = {
   check_in_time: string;
   check_out_time: string;
 
+  ga4_measurement_id: string | null;
+  gtm_container_id: string | null;
+  clarity_project_id: string | null;
+  fb_pixel_id: string | null;
+  gsc_verification_code: string | null;
+  google_business_profile_url: string | null;
+  google_place_id: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  service_area: string | null;
+  default_og_image_url: string | null;
+
   updated_at: string;
   updated_by: string | null;
+}
+
+export type PageSeoOverride = {
+  path: string;
+  title: string | null;
+  description: string | null;
+  canonical_path: string | null;
+  og_image_url: string | null;
+  noindex: boolean;
+  updated_at: string;
+  updated_by: string | null;
+}
+
+export type RedirectStatusCode = 301 | 302 | 307 | 308;
+
+export type Redirect = {
+  id: string;
+  from_path: string;
+  to_path: string;
+  status_code: RedirectStatusCode;
+  created_at: string;
+  created_by: string | null;
+}
+
+export type BlogPostStatus = 'draft' | 'scheduled' | 'published';
+export type BlogSchemaType = 'BlogPosting' | 'Article' | 'NewsArticle';
+
+export type BlogPost = {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt: string | null;
+  content: string;
+  featured_image_url: string | null;
+  featured_image_alt: string | null;
+  category: string | null;
+  tags: string[];
+  status: BlogPostStatus;
+  published_at: string | null;
+  author_id: string | null;
+  author_name: string | null;
+  meta_title: string | null;
+  meta_description: string | null;
+  focus_keyword: string | null;
+  canonical_url: string | null;
+  social_image_url: string | null;
+  schema_type: BlogSchemaType;
+  created_at: string;
+  updated_at: string;
+}
+
+export type AnalyticsEvent = {
+  id: string;
+  event_type: string;
+  booking_id: string | null;
+  session_id: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
 }
 
 export type DateRateOverride = {
@@ -359,6 +429,30 @@ export type Database = {
         Row: PrivacyRequest;
         Insert: Partial<PrivacyRequest> & Pick<PrivacyRequest, 'request_type' | 'name' | 'email'>;
         Update: Partial<PrivacyRequest>;
+        Relationships: [];
+      };
+      page_seo_overrides: {
+        Row: PageSeoOverride;
+        Insert: Partial<PageSeoOverride> & Pick<PageSeoOverride, 'path'>;
+        Update: Partial<PageSeoOverride>;
+        Relationships: [];
+      };
+      redirects: {
+        Row: Redirect;
+        Insert: Partial<Redirect> & Pick<Redirect, 'from_path' | 'to_path'>;
+        Update: Partial<Redirect>;
+        Relationships: [];
+      };
+      blog_posts: {
+        Row: BlogPost;
+        Insert: Partial<BlogPost> & Pick<BlogPost, 'slug' | 'title'>;
+        Update: Partial<BlogPost>;
+        Relationships: [];
+      };
+      analytics_events: {
+        Row: AnalyticsEvent;
+        Insert: Partial<AnalyticsEvent> & Pick<AnalyticsEvent, 'event_type'>;
+        Update: Partial<AnalyticsEvent>;
         Relationships: [];
       };
     };
